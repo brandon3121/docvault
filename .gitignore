@@ -1,0 +1,12 @@
+.env
+storage/*
+!storage/.gitkeep
+backend/storage/
+node_modules/
+__pycache__/
+.pytest_cache/
+dist/
+.venv/
+*.db
+*.db-wal
+*.db-shm
