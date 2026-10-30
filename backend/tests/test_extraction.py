@@ -59,22 +59,44 @@ def test_parse_date_invalid_calendar_day_returns_none():
     assert parse_date("Fecha: 31/02/2024") is None
 
 
+def test_parse_owner_ignores_heading_date_and_single_word():
+    text = "CARTA RESPONSIVA\nFecha: 25/02/2026\n\n  Ana   Prueba Ficticia \nSeguridad\n"
+    assert parse_owner(text) == "Ana Prueba Ficticia"
+
+
+def test_parse_owner_two_names_returns_none():
+    assert parse_owner("Ana Prueba Ficticia\nLuis Demo Inventado\n") is None
+
+
+def test_parse_owner_without_name_returns_none():
+    assert parse_owner("CARTA RESPONSIVA\nFecha: 25/02/2026\nSeguridad\n") is None
+
+
 def test_parse_owner_single_word_returns_none():
-    assert parse_owner("Firma\nAna\nSeguridad\n") is None
+    assert parse_owner("Seguridad") is None
 
 
-def test_parse_owner_two_candidates_returns_none():
-    text = "Ana Prueba Ficticia\nSeguridad\nLuis Ejemplo Falso\nSeguridad\n"
-    assert parse_owner(text) is None
+def test_parse_owner_rejects_excluded_words():
+    assert parse_owner("Grupo Cinbersol Servicios") is None
+    assert parse_owner("Nombre y firma") is None
 
 
-def test_parse_owner_rejects_excluded_words_and_digits():
-    assert parse_owner("Grupo Cinbersol Norte\nSeguridad\n") is None
-    assert parse_owner("Ana Prueba 2\nSeguridad\n") is None
+def test_parse_owner_excluded_words_match_whole_words():
+    assert parse_owner("Ana Cartagena Ficticia") == "Ana Cartagena Ficticia"
 
 
-def test_parse_owner_requires_area_on_next_line():
-    assert parse_owner("Ana Prueba Ficticia\nSistemas y redes\n") is None
+def test_parse_owner_rejects_digits_and_punctuation():
+    assert parse_owner("Ana Prueba 2") is None
+    assert parse_owner("Ana Prueba Ficticia.") is None
+
+
+def test_parse_owner_accepts_accents_apostrophes_and_hyphens():
+    assert parse_owner("José Pérez Núñez") == "José Pérez Núñez"
+    assert parse_owner("Ana O'Prueba Ficticia-Demo") == "Ana O'Prueba Ficticia-Demo"
+
+
+def test_parse_owner_long_paragraph_is_not_candidate():
+    assert parse_owner("Recibo el equipo en buen estado para su uso") is None
 
 
 def test_suggest_uses_text_layer_without_tesseract(tmp_path, monkeypatch):
@@ -156,3 +178,12 @@ def test_ocr_on_scanned_pdf(client, origins):  # noqa: F811
 
     assert response.status_code == 200
     assert response.json() == {"document_date": "2026-02-25", "owner_full_name": "Ana Prueba Ficticia"}
+
+
+@requires_tesseract
+def test_ocr_with_two_names_returns_no_owner(client, origins):  # noqa: F811
+    lines = ["CARTA RESPONSIVA", "Fecha: 25/02/2026", "", "Ana Prueba Ficticia", "", "Luis Demo Inventado"]
+    files = {"file": ("scan.pdf", image_only_pdf("\n".join(lines)), "application/pdf")}
+    response = client.post("/api/documents/extract", files=files)
+
+    assert response.json() == {"document_date": "2026-02-25", "owner_full_name": None}

@@ -19,10 +19,24 @@ OCR_DPI = 300
 OCR_LANGUAGE = "spa"
 OCR_PAGE_SEGMENTATION_MODE = "6"
 
-AREA_NAMES = ("Seguridad",)
-OWNER_EXCLUDED_WORDS = ("grupo", "cinbersol", "acepto")
+OWNER_EXCLUDED_WORDS = frozenset(
+    {
+        "grupo",
+        "cinbersol",
+        "acepto",
+        "carta",
+        "responsiva",
+        "fecha",
+        "firma",
+        "nombre",
+        "entrega",
+        "recibe",
+        "equipo",
+    }
+)
 OWNER_MIN_WORDS = 2
 OWNER_MAX_WORDS = 5
+OWNER_WORD_PATTERN = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
 
 DATE_PATTERN = re.compile(
     r"\bfecha\s*:\s*(\d{1,2})\s*[/-]\s*(\d{1,2})\s*[/-]\s*(\d{4})\b",
@@ -77,36 +91,26 @@ def parse_date(text: str) -> date | None:
         return None
 
 
-def _is_area_line(line: str) -> bool:
-    words = re.findall(r"\w+", normalize_text(line))
-    areas = {normalize_text(area) for area in AREA_NAMES}
-    return len(words) == 1 and words[0] in areas
-
-
-def _is_owner_candidate(line: str) -> bool:
+def _owner_candidate(line: str) -> str | None:
     words = line.split(" ")
     if not OWNER_MIN_WORDS <= len(words) <= OWNER_MAX_WORDS:
-        return False
-    if not all(word.isalpha() for word in words):
-        return False
-    normalized = normalize_text(line)
-    return not any(excluded in normalized for excluded in OWNER_EXCLUDED_WORDS)
+        return None
+    if not all(OWNER_WORD_PATTERN.fullmatch(word) for word in words):
+        return None
+    if line.isupper():
+        return None
+    if OWNER_EXCLUDED_WORDS.intersection(re.split(r"['’\s-]+", normalize_text(line))):
+        return None
+    try:
+        return clean_owner_full_name(line)
+    except ValidationFailure:
+        return None
 
 
 def parse_owner(text: str) -> str | None:
     lines = [collapse_spaces(line) for line in text.splitlines()]
-    lines = [line for line in lines if line]
-    candidates = [
-        line
-        for line, next_line in zip(lines, lines[1:])
-        if _is_area_line(next_line) and _is_owner_candidate(line)
-    ]
-    if len(candidates) != 1:
-        return None
-    try:
-        return clean_owner_full_name(candidates[0])
-    except ValidationFailure:
-        return None
+    candidates = [candidate for line in lines if line and (candidate := _owner_candidate(line))]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def suggest(pdf_path: Path | str) -> dict[str, str | None]:
