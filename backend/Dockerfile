@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-spa     && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -13,6 +15,8 @@ COPY migrations ./migrations
 COPY app ./app
 
 RUN mkdir -p /app/storage
+
+RUN tesseract --list-langs 2>&1 | tee /tmp/tesseract-langs.txt     && grep -qx spa /tmp/tesseract-langs.txt     && rm /tmp/tesseract-langs.txt
 
 EXPOSE 8000
 

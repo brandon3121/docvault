@@ -1,7 +1,7 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { duplicateDocumentId, uploadDocument, type DocumentRecord } from "../api";
-import DocumentForm, { type DocumentFormValues } from "../components/DocumentForm";
+import { duplicateDocumentId, extractDocumentFields, uploadDocument, type DocumentRecord } from "../api";
+import DocumentForm, { type DocumentFormSuggestion, type DocumentFormValues } from "../components/DocumentForm";
 import ErrorNotice from "../components/ErrorNotice";
 import { useDestinations } from "../hooks/useDestinations";
 import { documentErrorMessage } from "../messages";
@@ -22,6 +22,39 @@ export default function UploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const [extracting, setExtracting] = useState(false);
+  const [suggestion, setSuggestion] = useState<DocumentFormSuggestion | null>(null);
+  const extraction = useRef<AbortController | null>(null);
+
+  function readSuggestion(selected: File | null) {
+    extraction.current?.abort();
+    extraction.current = null;
+    setSuggestion(null);
+    setExtracting(false);
+    if (!selected) {
+      return;
+    }
+    const controller = new AbortController();
+    extraction.current = controller;
+    setExtracting(true);
+    extractDocumentFields(selected, controller.signal)
+      .then((found) => {
+        if (!controller.signal.aborted) {
+          setSuggestion({ ownerFullName: found.owner_full_name, documentDate: found.document_date });
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSuggestion({ ownerFullName: null, documentDate: null });
+        }
+      })
+      .finally(() => {
+        if (extraction.current === controller) {
+          extraction.current = null;
+          setExtracting(false);
+        }
+      });
+  }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
@@ -29,11 +62,13 @@ export default function UploadPage() {
     if (selected && !isPdf(selected)) {
       setFile(null);
       setFileError("Selecciona un archivo PDF.");
+      readSuggestion(null);
       event.target.value = "";
       return;
     }
     setFileError(null);
     setFile(selected);
+    readSuggestion(selected);
   }
 
   function validateFile(): boolean {
@@ -55,6 +90,12 @@ export default function UploadPage() {
     if (values.documentDate) {
       form.set("document_date", values.documentDate);
     }
+    if (suggestion?.ownerFullName) {
+      form.set("owner_name_extracted", suggestion.ownerFullName);
+    }
+    if (suggestion?.documentDate) {
+      form.set("document_date_extracted", suggestion.documentDate);
+    }
 
     setSubmitting(true);
     setResult(null);
@@ -63,6 +104,7 @@ export default function UploadPage() {
       setResult({ kind: "success", document });
       setFile(null);
       setFileError(null);
+      setSuggestion(null);
       setFormKey((key) => key + 1);
     } catch (error) {
       const existingId = duplicateDocumentId(error);
@@ -104,6 +146,8 @@ export default function UploadPage() {
         destinations={destinations}
         submitLabel={submitting ? "Subiendo" : "Subir"}
         submitting={submitting}
+        submitDisabled={extracting}
+        suggestion={suggestion}
         validateExtra={validateFile}
         onSubmit={handleSubmit}
         fileField={
@@ -112,6 +156,16 @@ export default function UploadPage() {
               ARCHIVO PDF
             </label>
             <input id="document-file" type="file" accept="application/pdf,.pdf" onChange={handleFileChange} required />
+            {extracting && (
+              <p className="mono muted" role="status">
+                Leyendo el documento...
+              </p>
+            )}
+            {!extracting && (suggestion?.ownerFullName || suggestion?.documentDate) && (
+              <p className="muted" role="status">
+                Sugerido automáticamente. Revisa antes de guardar.
+              </p>
+            )}
             {fileError && (
               <p className="form-error" role="alert">
                 {fileError}

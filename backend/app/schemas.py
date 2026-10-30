@@ -54,6 +54,11 @@ class DocumentPage(BaseModel):
     offset: int
 
 
+class DocumentSuggestion(BaseModel):
+    document_date: date | None
+    owner_full_name: str | None
+
+
 class DocumentUpdate(BaseModel):
     destination_id: int | None = None
     owner_full_name: str | None = None

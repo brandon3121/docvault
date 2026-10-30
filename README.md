@@ -42,7 +42,7 @@ curl http://localhost:8080/api/health
 - **Subir**: carta responsiva en PDF de hasta `MAX_UPLOAD_MB` MB (50 por defecto; el mismo valor limita nginx). Se capturan el origen, el nombre completo del propietario (nombre y al menos un apellido) y, opcionalmente, la fecha del documento. El tipo es siempre "Carta responsiva" y el título se toma del nombre del archivo. Si el propietario ya existe con otra escritura ("José Pérez" y "jose perez"), se reutiliza. Un PDF idéntico (mismo SHA-256) no se guarda dos veces: la app enlaza al documento existente.
 - **Documentos**: filtros por propietario (sin acentos ni mayúsculas), origen (incluye sucursales), nombre de archivo y rango de fechas. El detalle permite cambiar origen, propietario y fecha, y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
 
-La extracción automática de texto, propietario y fecha todavía no existe: esos datos se capturan a mano.
+Al elegir un PDF en **Subir**, el servidor lee las dos primeras páginas (capa de texto o, si es un escaneo, OCR con Tesseract en español) y sugiere la fecha del recuadro "Fecha:" y el nombre impreso sobre la línea del área ("Seguridad"). Las sugerencias solo llenan campos que el usuario no ha tocado y siempre se pueden corregir; si no se encuentra nada, los campos quedan vacíos. Al guardar se registra lo sugerido y si el usuario lo cambió (`owner_name_edited`, `document_date_edited`). La imagen de Docker incluye Tesseract; sin Docker hace falta instalarlo y, si no está en el `PATH`, indicar la ruta en `TESSERACT_CMD`. Sin Tesseract la carga funciona igual, solo sin sugerencias en escaneos.
 
 ## Desarrollo local sin Docker
 

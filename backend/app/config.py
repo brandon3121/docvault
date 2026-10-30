@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 12
     session_cookie_secure: bool = False
     max_upload_mb: int = 50
+    tesseract_cmd: str = "tesseract"
+    ocr_timeout_seconds: int = 60
 
 
 @lru_cache

@@ -56,6 +56,11 @@ export interface DocumentFilters {
   offset?: number;
 }
 
+export interface DocumentSuggestion {
+  document_date: string | null;
+  owner_full_name: string | null;
+}
+
 export interface DocumentUpdate {
   destination_id?: number;
   owner_full_name?: string;
@@ -143,6 +148,12 @@ export function getDocument(id: number): Promise<DocumentRecord> {
 
 export function uploadDocument(form: FormData): Promise<DocumentRecord> {
   return request<DocumentRecord>("/api/documents", { method: "POST", body: form });
+}
+
+export function extractDocumentFields(file: File, signal?: AbortSignal): Promise<DocumentSuggestion> {
+  const form = new FormData();
+  form.set("file", file);
+  return request<DocumentSuggestion>("/api/documents/extract", { method: "POST", body: form, signal });
 }
 
 export function updateDocument(id: number, changes: DocumentUpdate): Promise<DocumentRecord> {

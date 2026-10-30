@@ -1,5 +1,6 @@
+import logging
 from datetime import date, datetime
-from pathlib import PureWindowsPath
+from pathlib import Path, PureWindowsPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -10,9 +11,10 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import get_settings
 from app.deps import get_current_user, get_db
 from app.destinations import descendant_ids, load_destination_tree
+from app.extraction import suggest
 from app.models import Destination, Document, DocumentType, Owner, User
-from app.schemas import DocumentOut, DocumentPage, DocumentUpdate
-from app.search import build_fts_query, contains_pattern, normalize_text
+from app.schemas import DocumentOut, DocumentPage, DocumentSuggestion, DocumentUpdate
+from app.search import build_fts_query, collapse_spaces, contains_pattern, normalize_text
 from app.storage import (
     InvalidPdfError,
     UploadTooLargeError,
@@ -27,6 +29,7 @@ from app.validation import (
     validate_document_date,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 MAX_PAGE_SIZE = 100
@@ -113,9 +116,25 @@ def _title_from_filename(filename: str) -> str:
     return stem[:TITLE_MAX_LENGTH]
 
 
-def _owner_name_differs(owner: Owner | None, extracted_name: str | None) -> bool:
-    current_name = owner.full_name if owner else None
-    return normalize_text(current_name) != normalize_text(extracted_name)
+def _owner_name_differs(owner_name: str | None, extracted_name: str | None) -> bool:
+    return normalize_text(owner_name) != normalize_text(extracted_name)
+
+
+def _document_date_differs(document_date: date | None, extracted_date: date | None) -> bool:
+    return document_date != extracted_date
+
+
+def _spool_upload(file: UploadFile) -> tuple[Path, str]:
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    try:
+        return spool_pdf(file.file, max_bytes)
+    except InvalidPdfError:
+        raise _bad_request("El archivo no es un PDF válido") from None
+    except UploadTooLargeError:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"El archivo supera {get_settings().max_upload_mb} MB",
+        ) from None
 
 
 def _with_relations(query: Select) -> Select:
@@ -166,6 +185,8 @@ def create_document(
     destination_id: str | None = Form(None),
     owner_full_name: str | None = Form(None),
     document_date: str | None = Form(None),
+    owner_name_extracted: str | None = Form(None),
+    document_date_extracted: str | None = Form(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentOut:
@@ -175,18 +196,11 @@ def create_document(
     _require_existing(db, Destination, target_destination_id, "destination_id")
     owner_name = _clean_owner_full_name(owner_full_name)
     parsed_date = _validate_document_date(_parse_optional_date(document_date))
+    extracted_owner = collapse_spaces(owner_name_extracted) or None
+    extracted_date = _parse_optional_date(document_date_extracted)
     type_id = _responsive_letter_type_id(db)
 
-    max_bytes = get_settings().max_upload_mb * 1024 * 1024
-    try:
-        temp_path, sha256 = spool_pdf(file.file, max_bytes)
-    except InvalidPdfError:
-        raise _bad_request("The file is not a PDF") from None
-    except UploadTooLargeError:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"The file exceeds {get_settings().max_upload_mb} MB",
-        ) from None
+    temp_path, sha256 = _spool_upload(file)
 
     existing_id = db.scalar(select(Document.id).where(Document.sha256 == sha256))
     if existing_id is not None:
@@ -202,11 +216,12 @@ def create_document(
             document_type_id=type_id,
             destination_id=target_destination_id,
             owner_id=owner.id,
-            owner_name_extracted=None,
-            owner_name_edited=False,
+            owner_name_extracted=extracted_owner,
+            owner_name_edited=extracted_owner is not None and _owner_name_differs(owner.full_name, extracted_owner),
             document_date=parsed_date,
-            document_date_extracted=None,
-            document_date_edited=False,
+            document_date_extracted=extracted_date,
+            document_date_edited=extracted_date is not None
+            and _document_date_differs(parsed_date, extracted_date),
             original_filename=original_filename,
             storage_path=relative_path,
             sha256=sha256,
@@ -230,6 +245,21 @@ def create_document(
         raise
 
     return _to_out(_get_document(db, document.id), _destination_paths(db))
+
+
+@router.post("/extract", response_model=DocumentSuggestion)
+def extract_document_fields(
+    file: UploadFile = File(...),
+    _user: User = Depends(get_current_user),
+) -> DocumentSuggestion:
+    temp_path, _sha256 = _spool_upload(file)
+    try:
+        return DocumentSuggestion(**suggest(temp_path))
+    except Exception:
+        logger.exception("Field suggestion failed")
+        return DocumentSuggestion(document_date=None, owner_full_name=None)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 @router.get("", response_model=DocumentPage)
@@ -347,10 +377,12 @@ def update_document(
         owner = _get_or_create_owner(db, _clean_owner_full_name(payload.owner_full_name))
         document.owner_id = owner.id
         document.owner = owner
-        document.owner_name_edited = _owner_name_differs(owner, document.owner_name_extracted)
+        document.owner_name_edited = _owner_name_differs(owner.full_name, document.owner_name_extracted)
     if "document_date" in changes:
         document.document_date = _validate_document_date(payload.document_date)
-        document.document_date_edited = document.document_date != document.document_date_extracted
+        document.document_date_edited = _document_date_differs(
+            document.document_date, document.document_date_extracted
+        )
 
     db.commit()
     return _to_out(_get_document(db, document_id), _destination_paths(db))

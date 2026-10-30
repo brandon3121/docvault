@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import type { Destination, DocumentRecord } from "../api";
 import DestinationSelect from "./DestinationSelect";
 
@@ -15,8 +15,15 @@ interface DocumentFormProps {
   submitting: boolean;
   readOnly?: boolean;
   fileField?: ReactNode;
+  suggestion?: DocumentFormSuggestion | null;
+  submitDisabled?: boolean;
   validateExtra?: () => boolean;
   onSubmit: (values: DocumentFormValues) => void;
+}
+
+export interface DocumentFormSuggestion {
+  ownerFullName: string | null;
+  documentDate: string | null;
 }
 
 export const MIN_DOCUMENT_DATE = "2000-01-01";
@@ -74,6 +81,8 @@ export default function DocumentForm({
   submitting,
   readOnly = false,
   fileField,
+  suggestion = null,
+  submitDisabled = false,
   validateExtra,
   onSubmit,
 }: DocumentFormProps) {
@@ -81,8 +90,22 @@ export default function DocumentForm({
   const [ownerTouched, setOwnerTouched] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [dateTouched, setDateTouched] = useState(false);
+  const editedByUser = useRef(new Set<keyof DocumentFormValues>());
+
+  useEffect(() => {
+    if (!suggestion) {
+      return;
+    }
+    const edited = editedByUser.current;
+    setValues((current) => ({
+      ...current,
+      ownerFullName: edited.has("ownerFullName") ? current.ownerFullName : (suggestion.ownerFullName ?? ""),
+      documentDate: edited.has("documentDate") ? current.documentDate : (suggestion.documentDate ?? ""),
+    }));
+  }, [suggestion]);
 
   function update<K extends keyof DocumentFormValues>(key: K, value: DocumentFormValues[K]) {
+    editedByUser.current.add(key);
     setValues((current) => ({ ...current, [key]: value }));
   }
 
@@ -181,7 +204,7 @@ export default function DocumentForm({
 
         {!readOnly && (
           <div>
-            <button type="submit" className="button-primary" disabled={submitting}>
+            <button type="submit" className="button-primary" disabled={submitting || submitDisabled}>
               {submitLabel}
             </button>
           </div>
