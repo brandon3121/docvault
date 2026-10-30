@@ -159,6 +159,14 @@ button:disabled {
   font-size: 0.875rem;
 }
 
+.button-outline {
+  background: transparent;
+  color: var(--color-heading);
+  border: 1px solid var(--color-heading);
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.875rem;
+}
+
 .form-error {
   margin: 0;
   color: var(--color-heading);

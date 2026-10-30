@@ -75,8 +75,10 @@ class Document(Base):
     extracted_text: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deleted_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
     document_type: Mapped[DocumentType] = relationship()
     destination: Mapped[Destination] = relationship()
     owner: Mapped[Owner | None] = relationship()
-    uploader: Mapped[User] = relationship()
+    uploader: Mapped[User] = relationship(foreign_keys=[uploaded_by])

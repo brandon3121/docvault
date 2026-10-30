@@ -1,11 +1,22 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ApiError, documentFileUrl, getDocument, updateDocument, type DocumentRecord, type User } from "../api";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  ApiError,
+  deleteDocument,
+  documentFileUrl,
+  getDocument,
+  updateDocument,
+  type DocumentRecord,
+  type User,
+} from "../api";
 import DocumentForm, { valuesFromDocument, type DocumentFormValues } from "../components/DocumentForm";
 import ErrorNotice from "../components/ErrorNotice";
 import { formatDate, formatDateTime } from "../format";
 import { useDestinations } from "../hooks/useDestinations";
 import { documentErrorMessage } from "../messages";
+
+const DOCUMENT_DELETE_USERNAME = "dba";
+const DOCUMENT_DELETED_NOTICE = "Documento eliminado";
 
 interface DocumentDetailPageProps {
   user: User;
@@ -14,12 +25,15 @@ interface DocumentDetailPageProps {
 export default function DocumentDetailPage({ user }: DocumentDetailPageProps) {
   const { id } = useParams();
   const documentId = Number(id);
+  const navigate = useNavigate();
   const { destinations } = useDestinations();
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loadError, setLoadError] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     setDocument(null);
@@ -45,6 +59,25 @@ export default function DocumentDetailPage({ user }: DocumentDetailPageProps) {
       setMessage({ kind: "error", text: documentErrorMessage(error, "No se pudieron guardar los cambios.") });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm("¿Eliminar este documento? Dejará de aparecer en la aplicación.")) {
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteDocument(documentId);
+      navigate("/documents", { state: { notice: DOCUMENT_DELETED_NOTICE } });
+    } catch (error) {
+      setDeleteError(
+        error instanceof ApiError && error.status === 403
+          ? "No tienes permiso para eliminar documentos."
+          : documentErrorMessage(error, "No se pudo eliminar el documento."),
+      );
+      setDeleting(false);
     }
   }
 
@@ -124,6 +157,17 @@ export default function DocumentDetailPage({ user }: DocumentDetailPageProps) {
               onSubmit={handleSave}
             />
           </section>
+
+          {user.username === DOCUMENT_DELETE_USERNAME && (
+            <section className="section">
+              {deleteError && <ErrorNotice>{deleteError}</ErrorNotice>}
+              <div>
+                <button type="button" className="button-outline" onClick={handleDelete} disabled={deleting}>
+                  Eliminar documento
+                </button>
+              </div>
+            </section>
+          )}
         </div>
 
         <iframe className="pdf-frame" src={documentFileUrl(document.id)} title={`PDF: ${document.original_filename}`} />

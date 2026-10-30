@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { listDocuments, searchOwners, type DocumentFilters, type DocumentPage, type Owner } from "../api";
 import DestinationSelect from "../components/DestinationSelect";
 import { formatDate, formatDateTime } from "../format";
@@ -41,6 +41,8 @@ function useOwnerSuggestions(query: string): Owner[] {
 
 export default function DocumentsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const notice = (location.state as { notice?: string } | null)?.notice;
   const [params, setParams] = useSearchParams();
   const { destinations } = useDestinations();
   const [draft, setDraft] = useState<FilterValues>(() => filtersFromParams(params));
@@ -104,6 +106,11 @@ export default function DocumentsPage() {
   return (
     <div className="page-sections">
       <h1>Documentos</h1>
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
 
       <section className="section">
         <h2>Filtros</h2>

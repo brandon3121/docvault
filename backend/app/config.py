@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     max_upload_mb: int = 50
     tesseract_cmd: str = "tesseract"
     ocr_timeout_seconds: int = 60
+    document_delete_username: str = "dba"
 
 
 @lru_cache

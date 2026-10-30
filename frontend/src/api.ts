@@ -160,6 +160,10 @@ export function updateDocument(id: number, changes: DocumentUpdate): Promise<Doc
   return request<DocumentRecord>(`/api/documents/${id}`, json("PATCH", changes));
 }
 
+export function deleteDocument(id: number): Promise<void> {
+  return request<void>(`/api/documents/${id}`, { method: "DELETE" });
+}
+
 export function documentFileUrl(id: number): string {
   return `/api/documents/${id}/file`;
 }

@@ -9,7 +9,7 @@ from app.db import get_db
 from app.models import User, UserSession
 from app.security import hash_token
 
-__all__ = ["get_db", "get_current_user", "require_admin"]
+__all__ = ["get_db", "get_current_user", "require_admin", "require_document_deleter"]
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -43,4 +43,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return user
+
+
+def require_document_deleter(user: User = Depends(get_current_user)) -> User:
+    if user.username != get_settings().document_delete_username:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to delete documents")
     return user

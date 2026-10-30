@@ -9,10 +9,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
-from app.deps import get_current_user, get_db
+from app.deps import get_current_user, get_db, require_document_deleter
 from app.destinations import descendant_ids, load_destination_tree
 from app.extraction import suggest
-from app.models import Destination, Document, DocumentType, Owner, User
+from app.models import Destination, Document, DocumentType, Owner, User, utcnow
 from app.schemas import DocumentOut, DocumentPage, DocumentSuggestion, DocumentUpdate
 from app.search import build_fts_query, collapse_spaces, contains_pattern, normalize_text
 from app.storage import (
@@ -146,7 +146,9 @@ def _with_relations(query: Select) -> Select:
 
 
 def _get_document(db: Session, document_id: int) -> Document:
-    document = db.scalar(_with_relations(select(Document)).where(Document.id == document_id))
+    document = db.scalar(
+        _with_relations(select(Document)).where(Document.id == document_id, Document.deleted_at.is_(None))
+    )
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return document
@@ -276,7 +278,11 @@ def list_documents(
     db: Session = Depends(get_db),
 ) -> DocumentPage:
     limit = min(limit, MAX_PAGE_SIZE)
-    query = select(Document).outerjoin(Owner, Document.owner_id == Owner.id)
+    query = (
+        select(Document)
+        .outerjoin(Owner, Document.owner_id == Owner.id)
+        .where(Document.deleted_at.is_(None))
+    )
 
     fts_query = build_fts_query(q) if q else None
     if fts_query:
@@ -343,7 +349,7 @@ def get_document_file(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     document = db.get(Document, document_id)
-    if document is None:
+    if document is None or document.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     path = resolve_document_path(document.storage_path)
     if not path.is_file():
@@ -386,3 +392,17 @@ def update_document(
 
     db.commit()
     return _to_out(_get_document(db, document_id), _destination_paths(db))
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: int,
+    user: User = Depends(require_document_deleter),
+    db: Session = Depends(get_db),
+) -> None:
+    document = db.get(Document, document_id)
+    if document is None or document.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    document.deleted_at = utcnow()
+    document.deleted_by_id = user.id
+    db.commit()
