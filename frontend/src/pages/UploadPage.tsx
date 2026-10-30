@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import { duplicateDocumentId, extractDocumentFields, uploadDocument, type DocumentRecord } from "../api";
 import DocumentForm, { type DocumentFormSuggestion, type DocumentFormValues } from "../components/DocumentForm";
@@ -15,6 +15,26 @@ function isPdf(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
+function canPreviewPdf(): boolean {
+  return navigator.pdfViewerEnabled !== false;
+}
+
+function usePreviewUrl(file: File | null): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  return url;
+}
+
 export default function UploadPage() {
   const { destinations, error: destinationsError } = useDestinations();
   const [file, setFile] = useState<File | null>(null);
@@ -25,6 +45,7 @@ export default function UploadPage() {
   const [extracting, setExtracting] = useState(false);
   const [suggestion, setSuggestion] = useState<DocumentFormSuggestion | null>(null);
   const extraction = useRef<AbortController | null>(null);
+  const previewUrl = usePreviewUrl(file);
 
   function readSuggestion(selected: File | null) {
     extraction.current?.abort();
@@ -119,7 +140,7 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="page-sections narrow">
+    <div className={previewUrl ? "page-sections" : "page-sections narrow"}>
       <h1>Subir carta responsiva</h1>
 
       {destinationsError && <p className="form-error">No se pudieron cargar los orígenes.</p>}
@@ -141,39 +162,52 @@ export default function UploadPage() {
         <ErrorNotice>{result.message}</ErrorNotice>
       )}
 
-      <DocumentForm
-        key={formKey}
-        destinations={destinations}
-        submitLabel={submitting ? "Subiendo" : "Subir"}
-        submitting={submitting}
-        submitDisabled={extracting}
-        suggestion={suggestion}
-        validateExtra={validateFile}
-        onSubmit={handleSubmit}
-        fileField={
-          <div className="field">
-            <label className="field-label mono" htmlFor="document-file">
-              ARCHIVO PDF
-            </label>
-            <input id="document-file" type="file" accept="application/pdf,.pdf" onChange={handleFileChange} required />
-            {extracting && (
-              <p className="mono muted" role="status">
-                Leyendo el documento...
-              </p>
-            )}
-            {!extracting && (suggestion?.ownerFullName || suggestion?.documentDate) && (
-              <p className="muted" role="status">
-                Sugerido automáticamente. Revisa antes de guardar.
-              </p>
-            )}
-            {fileError && (
-              <p className="form-error" role="alert">
-                {fileError}
-              </p>
+      <div className={previewUrl ? "upload-layout" : undefined}>
+        {previewUrl && (
+          <div className="upload-preview">
+            {canPreviewPdf() ? (
+              <iframe className="upload-preview-frame" src={previewUrl} title="Vista previa del documento" />
+            ) : (
+              <p className="muted">No se puede mostrar la vista previa</p>
             )}
           </div>
-        }
-      />
+        )}
+        <div className="upload-form">
+          <DocumentForm
+            key={formKey}
+            destinations={destinations}
+            submitLabel={submitting ? "Subiendo" : "Subir"}
+            submitting={submitting}
+            submitDisabled={extracting}
+            suggestion={suggestion}
+            validateExtra={validateFile}
+            onSubmit={handleSubmit}
+            fileField={
+              <div className="field">
+                <label className="field-label mono" htmlFor="document-file">
+                  ARCHIVO PDF
+                </label>
+                <input id="document-file" type="file" accept="application/pdf,.pdf" onChange={handleFileChange} required />
+                {extracting && (
+                  <p className="mono muted" role="status">
+                    Leyendo el documento...
+                  </p>
+                )}
+                {!extracting && (suggestion?.ownerFullName || suggestion?.documentDate) && (
+                  <p className="muted" role="status">
+                    Sugerido automáticamente. Revisa antes de guardar.
+                  </p>
+                )}
+                {fileError && (
+                  <p className="form-error" role="alert">
+                    {fileError}
+                  </p>
+                )}
+              </div>
+            }
+          />
+        </div>
+      </div>
     </div>
   );
 }

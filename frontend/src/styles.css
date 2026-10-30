@@ -504,6 +504,44 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   color: var(--color-text-secondary);
 }
 
+.upload-layout {
+  display: grid;
+  grid-template-areas:
+    "preview"
+    "form";
+  gap: var(--space-4);
+}
+
+.upload-form {
+  grid-area: form;
+  min-width: 0;
+}
+
+.upload-preview {
+  grid-area: preview;
+  min-width: 0;
+}
+
+.upload-preview-frame {
+  display: block;
+  width: 100%;
+  height: 60vh;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+@media (min-width: 960px) {
+  .upload-layout {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-areas: "form preview";
+    align-items: start;
+  }
+
+  .upload-preview-frame {
+    height: 80vh;
+  }
+}
+
 .pdf-frame {
   width: 100%;
   height: 80vh;
