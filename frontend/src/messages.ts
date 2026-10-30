@@ -1,22 +1,30 @@
 import { ApiError } from "./api";
 
+const DETAIL_STATUSES = new Set([400, 409, 413, 422]);
+
+function detailText(detail: unknown): string | null {
+  if (typeof detail === "string") {
+    return detail || null;
+  }
+  if (Array.isArray(detail)) {
+    return detail.length > 0 ? detailText(detail[0]) : null;
+  }
+  if (detail && typeof detail === "object") {
+    const { msg, message } = detail as { msg?: unknown; message?: unknown };
+    if (typeof msg === "string" && msg) {
+      return msg;
+    }
+    if (typeof message === "string" && message) {
+      return message;
+    }
+  }
+  return null;
+}
+
 export function documentErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
-    const detail = typeof error.detail === "string" ? error.detail : "";
-    if (error.status === 400) {
-      if (detail.includes("future")) {
-        return "La fecha del documento no puede ser futura.";
-      }
-      if (detail.includes("owner_full_name")) {
-        return "Escribe el nombre completo del propietario: nombre y al menos un apellido.";
-      }
-      if (detail.includes("not a PDF")) {
-        return "El archivo no es un PDF válido.";
-      }
-      return "Revisa los datos del formulario.";
-    }
-    if (error.status === 413) {
-      return "El archivo supera el tamaño máximo permitido.";
+    if (DETAIL_STATUSES.has(error.status)) {
+      return detailText(error.detail) ?? fallback;
     }
     if (error.status === 403) {
       return "Solo quien subió el documento o un administrador puede editarlo.";

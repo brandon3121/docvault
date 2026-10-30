@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import type { Destination, DocumentRecord } from "../api";
 import DestinationSelect from "./DestinationSelect";
 
@@ -15,8 +15,13 @@ interface DocumentFormProps {
   submitting: boolean;
   readOnly?: boolean;
   fileField?: ReactNode;
+  validateExtra?: () => boolean;
   onSubmit: (values: DocumentFormValues) => void;
 }
+
+export const MIN_DOCUMENT_DATE = "2000-01-01";
+export const OWNER_NAME_MESSAGE = "Escribe nombre y al menos un apellido";
+export const DOCUMENT_DATE_MESSAGE = "La fecha debe estar entre 2000 y hoy";
 
 export const EMPTY_DOCUMENT_FORM: DocumentFormValues = {
   destinationId: "",
@@ -46,6 +51,22 @@ function hasFirstAndLastName(value: string): boolean {
   return collapseSpaces(value).split(" ").length >= 2;
 }
 
+function isDocumentDateInRange(value: string): boolean {
+  return !value || (value >= MIN_DOCUMENT_DATE && value <= todayIso());
+}
+
+function openDatePicker(event: SyntheticEvent<HTMLInputElement>) {
+  const input = event.currentTarget;
+  if (typeof input.showPicker !== "function") {
+    return;
+  }
+  try {
+    input.showPicker();
+  } catch {
+    return;
+  }
+}
+
 export default function DocumentForm({
   destinations,
   initialValues = EMPTY_DOCUMENT_FORM,
@@ -53,10 +74,13 @@ export default function DocumentForm({
   submitting,
   readOnly = false,
   fileField,
+  validateExtra,
   onSubmit,
 }: DocumentFormProps) {
   const [values, setValues] = useState<DocumentFormValues>(initialValues);
   const [ownerTouched, setOwnerTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [dateTouched, setDateTouched] = useState(false);
 
   function update<K extends keyof DocumentFormValues>(key: K, value: DocumentFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -65,13 +89,23 @@ export default function DocumentForm({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setOwnerTouched(true);
-    if (!hasFirstAndLastName(values.ownerFullName)) {
+    setSubmitAttempted(true);
+    setDateTouched(true);
+    const extraValid = validateExtra ? validateExtra() : true;
+    if (
+      !extraValid ||
+      !values.destinationId ||
+      !hasFirstAndLastName(values.ownerFullName) ||
+      !isDocumentDateInRange(values.documentDate)
+    ) {
       return;
     }
     onSubmit({ ...values, ownerFullName: collapseSpaces(values.ownerFullName) });
   }
 
   const ownerInvalid = ownerTouched && !hasFirstAndLastName(values.ownerFullName);
+  const destinationMissing = submitAttempted && !values.destinationId;
+  const dateInvalid = dateTouched && !isDocumentDateInRange(values.documentDate);
 
   return (
     <form className="form" onSubmit={handleSubmit} noValidate>
@@ -90,6 +124,11 @@ export default function DocumentForm({
             emptyLabel="Selecciona un origen"
             required
           />
+          {destinationMissing && (
+            <p className="form-error" role="alert">
+              Selecciona un origen.
+            </p>
+          )}
         </div>
 
         <div className="field">
@@ -110,7 +149,7 @@ export default function DocumentForm({
           />
           {ownerInvalid && (
             <p id="document-owner-error" className="form-error" role="alert">
-              Escribe nombre y al menos un apellido.
+              {OWNER_NAME_MESSAGE}
             </p>
           )}
         </div>
@@ -122,19 +161,27 @@ export default function DocumentForm({
           <input
             id="document-date"
             type="date"
+            className="date-input"
+            min={MIN_DOCUMENT_DATE}
             max={todayIso()}
             value={values.documentDate}
             onChange={(event) => update("documentDate", event.target.value)}
+            onFocus={openDatePicker}
+            onClick={openDatePicker}
+            onBlur={() => values.documentDate && setDateTouched(true)}
+            aria-invalid={dateInvalid}
+            aria-describedby={dateInvalid ? "document-date-error" : undefined}
           />
+          {dateInvalid && (
+            <p id="document-date-error" className="form-error" role="alert">
+              {DOCUMENT_DATE_MESSAGE}
+            </p>
+          )}
         </div>
 
         {!readOnly && (
           <div>
-            <button
-              type="submit"
-              className="button-primary"
-              disabled={submitting || !values.destinationId || !values.ownerFullName.trim()}
-            >
+            <button type="submit" className="button-primary" disabled={submitting}>
               {submitLabel}
             </button>
           </div>

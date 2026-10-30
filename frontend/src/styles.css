@@ -167,6 +167,28 @@ button:disabled {
   font-size: 0.875rem;
 }
 
+.error-notice {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--color-heading);
+  border-top: 2px solid var(--color-heading);
+  padding-top: var(--space-1);
+  font-size: 0.875rem;
+}
+
+.error-notice p {
+  margin: 0;
+}
+
+.error-notice-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+}
+
+.date-input {
+  color-scheme: dark;
+}
+
 .topbar {
   display: flex;
   align-items: center;

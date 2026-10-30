@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, documentFileUrl, getDocument, updateDocument, type DocumentRecord, type User } from "../api";
 import DocumentForm, { valuesFromDocument, type DocumentFormValues } from "../components/DocumentForm";
+import ErrorNotice from "../components/ErrorNotice";
 import { formatDate, formatDateTime } from "../format";
 import { useDestinations } from "../hooks/useDestinations";
 import { documentErrorMessage } from "../messages";
@@ -106,14 +107,12 @@ export default function DocumentDetailPage({ user }: DocumentDetailPageProps) {
 
           <section className="section">
             <h2>Editar</h2>
-            {message && (
-              <p
-                className={message.kind === "ok" ? "notice" : "form-error"}
-                role={message.kind === "ok" ? "status" : "alert"}
-              >
+            {message?.kind === "ok" && (
+              <p className="notice" role="status">
                 {message.text}
               </p>
             )}
+            {message?.kind === "error" && <ErrorNotice>{message.text}</ErrorNotice>}
             {!canEdit && <p className="muted">Solo quien subió el documento o un administrador puede editarlo.</p>}
             <DocumentForm
               key={`${document.id}-${formKey}`}

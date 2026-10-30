@@ -12,7 +12,7 @@ from app.deps import get_current_user, get_db
 from app.destinations import descendant_ids, load_destination_tree
 from app.models import Destination, Document, DocumentType, Owner, User
 from app.schemas import DocumentOut, DocumentPage, DocumentUpdate
-from app.search import build_fts_query, collapse_spaces, contains_pattern, normalize_text
+from app.search import build_fts_query, contains_pattern, normalize_text
 from app.storage import (
     InvalidPdfError,
     UploadTooLargeError,
@@ -20,12 +20,17 @@ from app.storage import (
     resolve_document_path,
     spool_pdf,
 )
+from app.validation import (
+    DOCUMENT_DATE_FORMAT_MESSAGE,
+    ValidationFailure,
+    clean_owner_full_name,
+    validate_document_date,
+)
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 MAX_PAGE_SIZE = 100
 TITLE_MAX_LENGTH = 500
-OWNER_NAME_MAX_LENGTH = 255
 RESPONSIVE_LETTER_TYPE = "Carta responsiva"
 
 
@@ -55,13 +60,14 @@ def _parse_optional_date(value: str | None) -> date | None:
     try:
         return datetime.strptime(value.strip(), "%Y-%m-%d").date()
     except ValueError:
-        raise _bad_request("document_date must use the YYYY-MM-DD format") from None
+        raise _bad_request(DOCUMENT_DATE_FORMAT_MESSAGE) from None
 
 
 def _validate_document_date(value: date | None) -> date | None:
-    if value is not None and value > date.today():
-        raise _bad_request("document_date cannot be in the future")
-    return value
+    try:
+        return validate_document_date(value)
+    except ValidationFailure as error:
+        raise _bad_request(str(error)) from None
 
 
 def _require_existing(db: Session, model: type, object_id: int, field: str) -> None:
@@ -70,14 +76,10 @@ def _require_existing(db: Session, model: type, object_id: int, field: str) -> N
 
 
 def _clean_owner_full_name(value: str | None) -> str:
-    cleaned = collapse_spaces(value)
-    if not cleaned:
-        raise _bad_request("owner_full_name is required")
-    if len(cleaned.split(" ")) < 2:
-        raise _bad_request("owner_full_name must include at least a first name and a last name")
-    if len(cleaned) > OWNER_NAME_MAX_LENGTH:
-        raise _bad_request(f"owner_full_name must be at most {OWNER_NAME_MAX_LENGTH} characters")
-    return cleaned
+    try:
+        return clean_owner_full_name(value)
+    except ValidationFailure as error:
+        raise _bad_request(str(error)) from None
 
 
 def _get_or_create_owner(db: Session, full_name: str) -> Owner:

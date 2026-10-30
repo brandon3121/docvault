@@ -3,6 +3,8 @@ from datetime import date, timedelta
 
 import pytest
 
+from app.validation import DOCUMENT_DATE_RANGE_MESSAGE, OWNER_NAME_WORDS_MESSAGE
+
 MINIMAL_PDF = (
     b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
     b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
@@ -72,7 +74,7 @@ def test_upload_requires_owner(client, origins):
 def test_upload_single_word_owner_returns_400(client, origins):
     response = upload(client, origins, owner_full_name="  Juan  ")
     assert response.status_code == 400
-    assert "last name" in response.json()["detail"]
+    assert response.json()["detail"] == OWNER_NAME_WORDS_MESSAGE
 
 
 def test_owner_name_is_cleaned_and_kept_as_written(client, origins):
@@ -116,8 +118,26 @@ def test_upload_date_one_year_ago_is_accepted(client, origins):
     assert response.json()["document_date"] == last_year.isoformat()
 
 
-def test_upload_old_date_is_accepted(client, origins):
-    assert upload(client, origins, document_date="1995-03-15").status_code == 201
+def test_upload_year_0266_returns_400(client, origins):
+    response = upload(client, origins, document_date="0266-05-10")
+    assert response.status_code == 400
+    assert response.json()["detail"] == DOCUMENT_DATE_RANGE_MESSAGE
+
+
+def test_upload_date_before_2000_returns_400(client, origins):
+    response = upload(client, origins, document_date="1999-12-31")
+    assert response.status_code == 400
+    assert response.json()["detail"] == DOCUMENT_DATE_RANGE_MESSAGE
+
+
+def test_upload_first_day_of_2000_is_accepted(client, origins):
+    response = upload(client, origins, document_date="2000-01-01")
+    assert response.status_code == 201
+    assert response.json()["document_date"] == "2000-01-01"
+
+
+def test_upload_today_is_accepted(client, origins):
+    assert upload(client, origins, document_date=date.today().isoformat()).status_code == 201
 
 
 def test_upload_without_date_is_accepted(client, origins):
@@ -228,6 +248,15 @@ def test_patch_single_word_owner_returns_400(client, origins):
     document_id = upload(client, origins).json()["id"]
     response = client.patch(f"/api/documents/{document_id}", json={"owner_full_name": "Laura"})
     assert response.status_code == 400
+    assert response.json()["detail"] == OWNER_NAME_WORDS_MESSAGE
+
+
+def test_patch_year_0266_returns_400(client, origins):
+    document_id = upload(client, origins, document_date="2020-01-01").json()["id"]
+    response = client.patch(f"/api/documents/{document_id}", json={"document_date": "0266-05-10"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == DOCUMENT_DATE_RANGE_MESSAGE
+    assert client.get(f"/api/documents/{document_id}").json()["document_date"] == "2020-01-01"
 
 
 def test_patch_origin_and_date(client, origins):
@@ -248,6 +277,7 @@ def test_patch_future_date_returns_400(client, origins):
     tomorrow = date.today() + timedelta(days=1)
     response = client.patch(f"/api/documents/{document_id}", json={"document_date": tomorrow.isoformat()})
     assert response.status_code == 400
+    assert response.json()["detail"] == DOCUMENT_DATE_RANGE_MESSAGE
 
 
 def test_patch_by_other_regular_user_returns_403(client, origins, login_as):

@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import { duplicateDocumentId, uploadDocument, type DocumentRecord } from "../api";
 import DocumentForm, { type DocumentFormValues } from "../components/DocumentForm";
+import ErrorNotice from "../components/ErrorNotice";
 import { useDestinations } from "../hooks/useDestinations";
 import { documentErrorMessage } from "../messages";
 
@@ -35,9 +36,16 @@ export default function UploadPage() {
     setFile(selected);
   }
 
-  async function handleSubmit(values: DocumentFormValues) {
+  function validateFile(): boolean {
     if (!file) {
       setFileError("Selecciona un archivo PDF.");
+      return false;
+    }
+    return true;
+  }
+
+  async function handleSubmit(values: DocumentFormValues) {
+    if (!file) {
       return;
     }
     const form = new FormData();
@@ -54,6 +62,7 @@ export default function UploadPage() {
       const document = await uploadDocument(form);
       setResult({ kind: "success", document });
       setFile(null);
+      setFileError(null);
       setFormKey((key) => key + 1);
     } catch (error) {
       const existingId = duplicateDocumentId(error);
@@ -82,14 +91,12 @@ export default function UploadPage() {
         </p>
       )}
       {result?.kind === "duplicate" && (
-        <p className="form-error" role="alert">
+        <ErrorNotice>
           Este PDF ya está registrado. <Link to={`/documents/${result.documentId}`}>Ver el documento existente</Link>
-        </p>
+        </ErrorNotice>
       )}
       {result?.kind === "error" && (
-        <p className="form-error" role="alert">
-          {result.message}
-        </p>
+        <ErrorNotice>{result.message}</ErrorNotice>
       )}
 
       <DocumentForm
@@ -97,6 +104,7 @@ export default function UploadPage() {
         destinations={destinations}
         submitLabel={submitting ? "Subiendo" : "Subir"}
         submitting={submitting}
+        validateExtra={validateFile}
         onSubmit={handleSubmit}
         fileField={
           <div className="field">
