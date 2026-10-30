@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
@@ -61,12 +61,12 @@ class Document(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
-    document_type_id: Mapped[int] = mapped_column(ForeignKey("document_types.id"))
-    destination_id: Mapped[int] = mapped_column(ForeignKey("destinations.id"))
-    owner_id: Mapped[int | None] = mapped_column(ForeignKey("owners.id"))
+    document_type_id: Mapped[int] = mapped_column(ForeignKey("document_types.id"), index=True)
+    destination_id: Mapped[int] = mapped_column(ForeignKey("destinations.id"), index=True)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("owners.id"), index=True)
     owner_name_extracted: Mapped[str | None] = mapped_column(Text)
     owner_name_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
-    document_date: Mapped[date | None] = mapped_column(Date)
+    document_date: Mapped[date | None] = mapped_column(Date, index=True)
     document_date_extracted: Mapped[date | None] = mapped_column(Date)
     document_date_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     original_filename: Mapped[str] = mapped_column(String(500))
@@ -75,3 +75,8 @@ class Document(Base):
     extracted_text: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    document_type: Mapped[DocumentType] = relationship()
+    destination: Mapped[Destination] = relationship()
+    owner: Mapped[Owner | None] = relationship()
+    uploader: Mapped[User] = relationship()

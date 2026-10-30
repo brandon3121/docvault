@@ -1,23 +1,47 @@
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi import Depends
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.db import Base, build_engine, get_db
+from app.config import get_settings
+from app.db import build_engine, get_db
 from app.deps import require_admin
 from app.main import create_app
 from app.models import User
 from app.security import hash_password
 
 TEST_PASSWORD = "correct-horse-battery"
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
+def run_migrations(database_url: str) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
+    config.set_main_option("sqlalchemy.url", database_url)
+    command.upgrade(config, "head")
+
+
+@pytest.fixture(autouse=True)
+def storage_path(tmp_path, monkeypatch) -> Iterator[Path]:
+    path = tmp_path / "storage"
+    path.mkdir()
+    monkeypatch.setenv("STORAGE_PATH", str(path))
+    monkeypatch.setenv("MAX_UPLOAD_MB", "1")
+    get_settings.cache_clear()
+    yield path
+    get_settings.cache_clear()
 
 
 @pytest.fixture
 def session_factory(tmp_path) -> Iterator[sessionmaker[Session]]:
-    engine = build_engine(f"sqlite:///{tmp_path / 'test.db'}")
-    Base.metadata.create_all(engine)
+    database_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    run_migrations(database_url)
+    engine = build_engine(database_url)
     yield sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     engine.dispose()
 
@@ -58,3 +82,15 @@ def create_user(session_factory) -> Callable[..., User]:
             return user
 
     return _create
+
+
+@pytest.fixture
+def login_as(client, create_user) -> Callable[..., User]:
+    def _login(username: str = "alice", role: str = "admin") -> User:
+        user = create_user(username=username, role=role)
+        client.cookies.clear()
+        response = client.post("/api/auth/login", json={"username": username, "password": TEST_PASSWORD})
+        assert response.status_code == 200
+        return user
+
+    return _login

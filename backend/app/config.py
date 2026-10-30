@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     session_cookie_name: str = "docvault_session"
     session_ttl_hours: int = 12
     session_cookie_secure: bool = False
+    max_upload_mb: int = 50
 
 
 @lru_cache

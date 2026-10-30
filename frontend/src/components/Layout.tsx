@@ -1,12 +1,13 @@
 import { useState } from "react";
+import { NavLink, Outlet } from "react-router-dom";
 import { logout, type User } from "../api";
 
-interface HomePageProps {
+interface LayoutProps {
   user: User;
   onLogout: () => void;
 }
 
-export default function HomePage({ user, onLogout }: HomePageProps) {
+export default function Layout({ user, onLogout }: LayoutProps) {
   const [busy, setBusy] = useState(false);
 
   async function handleLogout() {
@@ -22,15 +23,28 @@ export default function HomePage({ user, onLogout }: HomePageProps) {
     <div className="page">
       <header className="topbar">
         <span className="brand">docvault</span>
+        <nav className="nav" aria-label="Principal">
+          <NavLink to="/documents" end className="nav-link">
+            Documentos
+          </NavLink>
+          <NavLink to="/upload" className="nav-link">
+            Subir
+          </NavLink>
+          {user.role === "admin" && (
+            <NavLink to="/catalogs" className="nav-link">
+              Catálogos
+            </NavLink>
+          )}
+        </nav>
         <div className="topbar-actions">
-          <span className="mono muted">{user.role.toUpperCase()}</span>
+          <span className="mono muted topbar-user">{user.full_name.toUpperCase()}</span>
           <button type="button" className="button-secondary" onClick={handleLogout} disabled={busy}>
             Cerrar sesión
           </button>
         </div>
       </header>
       <main className="content">
-        <h1>Bienvenido, {user.full_name}</h1>
+        <Outlet />
       </main>
     </div>
   );

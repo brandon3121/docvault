@@ -12,6 +12,12 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+UNMANAGED_TABLE_PREFIX = "document_fts"
+
+
+def include_object(_object, name, type_, _reflected, _compare_to) -> bool:
+    return not (type_ == "table" and name.startswith(UNMANAGED_TABLE_PREFIX))
+
 
 def get_url() -> str:
     return config.get_main_option("sqlalchemy.url") or get_settings().database_url
@@ -24,6 +30,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -36,6 +43,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            include_object=include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

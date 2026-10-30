@@ -4,7 +4,7 @@ Aplicación interna para guardar PDFs con destino, tipo, propietario y fecha, co
 
 - Backend: FastAPI + SQLAlchemy 2 + Alembic sobre SQLite (WAL).
 - Frontend: React + TypeScript (Vite), servido por nginx.
-- Datos: todo vive en `./storage` (base de datos y, más adelante, los PDFs).
+- Datos: todo vive en `./storage`: la base de datos `docvault.db` y los PDFs en `storage/documents/ab/cd/<sha256>.pdf`.
 
 ## Puesta en marcha con Docker
 
@@ -35,6 +35,14 @@ Comprobación rápida:
 ```sh
 curl http://localhost:8080/api/health
 ```
+
+## Uso
+
+- **Catálogos** (solo administradores): destinos jerárquicos, tipos de documento y propietarios. Hay que crear al menos un destino y un tipo antes de subir documentos. Un catálogo con documentos asociados no se puede borrar.
+- **Subir**: PDF de hasta `MAX_UPLOAD_MB` MB (50 por defecto; el mismo valor limita nginx). Un PDF idéntico (mismo SHA-256) no se guarda dos veces: la app enlaza al documento existente. Si el propietario escrito no existe, se crea.
+- **Documentos**: búsqueda por texto en el título (FTS5), filtros por propietario (sin acentos ni mayúsculas), destino (incluye subdestinos), tipo y rango de fechas. El detalle permite editar metadatos y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
+
+La extracción automática de texto, propietario y fecha todavía no existe: esos datos se capturan a mano.
 
 ## Desarrollo local sin Docker
 

@@ -4,6 +4,7 @@ from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
+from app.search import normalize_text
 
 
 class Base(DeclarativeBase):
@@ -20,6 +21,7 @@ def build_engine(database_url: str) -> Engine:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout=5000")
         cursor.close()
+        dbapi_connection.create_function("normalize_text", 1, normalize_text, deterministic=True)
 
     return engine
 
