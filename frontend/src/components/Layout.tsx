@@ -31,8 +31,8 @@ export default function Layout({ user, onLogout }: LayoutProps) {
             Subir
           </NavLink>
           {user.role === "admin" && (
-            <NavLink to="/catalogs" className="nav-link">
-              Catálogos
+            <NavLink to="/origins" className="nav-link">
+              Orígenes
             </NavLink>
           )}
         </nav>

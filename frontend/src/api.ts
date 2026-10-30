@@ -13,15 +13,9 @@ export interface Destination {
   path: string;
 }
 
-export interface DocumentType {
-  id: number;
-  name: string;
-}
-
 export interface Owner {
   id: number;
   full_name: string;
-  department: string | null;
 }
 
 export interface DocumentRecord {
@@ -56,7 +50,6 @@ export interface DocumentFilters {
   q?: string;
   owner?: string;
   destination_id?: string;
-  document_type_id?: string;
   date_from?: string;
   date_to?: string;
   limit?: number;
@@ -64,11 +57,8 @@ export interface DocumentFilters {
 }
 
 export interface DocumentUpdate {
-  title?: string;
   destination_id?: number;
-  document_type_id?: number;
-  owner_id?: number | null;
-  owner_name?: string | null;
+  owner_full_name?: string;
   document_date?: string | null;
 }
 
@@ -121,28 +111,12 @@ export function createDestination(name: string, parentId: number | null): Promis
   return request<Destination>("/api/destinations", json("POST", { name, parent_id: parentId }));
 }
 
-export function updateDestination(id: number, name: string, parentId: number | null): Promise<Destination> {
-  return request<Destination>(`/api/destinations/${id}`, json("PUT", { name, parent_id: parentId }));
+export function renameDestination(id: number, name: string): Promise<Destination> {
+  return request<Destination>(`/api/destinations/${id}`, json("PUT", { name }));
 }
 
 export function deleteDestination(id: number): Promise<void> {
   return request<void>(`/api/destinations/${id}`, { method: "DELETE" });
-}
-
-export function listDocumentTypes(): Promise<DocumentType[]> {
-  return request<DocumentType[]>("/api/document-types");
-}
-
-export function createDocumentType(name: string): Promise<DocumentType> {
-  return request<DocumentType>("/api/document-types", json("POST", { name }));
-}
-
-export function updateDocumentType(id: number, name: string): Promise<DocumentType> {
-  return request<DocumentType>(`/api/document-types/${id}`, json("PUT", { name }));
-}
-
-export function deleteDocumentType(id: number): Promise<void> {
-  return request<void>(`/api/document-types/${id}`, { method: "DELETE" });
 }
 
 export function searchOwners(query: string, signal?: AbortSignal): Promise<Owner[]> {
@@ -151,18 +125,6 @@ export function searchOwners(query: string, signal?: AbortSignal): Promise<Owner
     params.set("q", query.trim());
   }
   return request<Owner[]>(`/api/owners?${params}`, { signal });
-}
-
-export function createOwner(fullName: string, department: string | null): Promise<Owner> {
-  return request<Owner>("/api/owners", json("POST", { full_name: fullName, department }));
-}
-
-export function updateOwner(id: number, fullName: string, department: string | null): Promise<Owner> {
-  return request<Owner>(`/api/owners/${id}`, json("PUT", { full_name: fullName, department }));
-}
-
-export function deleteOwner(id: number): Promise<void> {
-  return request<void>(`/api/owners/${id}`, { method: "DELETE" });
 }
 
 export function listDocuments(filters: DocumentFilters): Promise<DocumentPage> {

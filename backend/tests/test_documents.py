@@ -16,35 +16,35 @@ def make_pdf(marker: str) -> bytes:
 
 
 @pytest.fixture
-def catalogs(client, login_as):
+def origins(client, login_as):
     login_as()
-    root = client.post("/api/destinations", json={"name": "Finanzas"}).json()
-    child = client.post("/api/destinations", json={"name": "Facturas", "parent_id": root["id"]}).json()
-    other = client.post("/api/destinations", json={"name": "Legal"}).json()
-    document_type = client.post("/api/document-types", json={"name": "Contrato"}).json()
-    return {"root": root, "child": child, "other": other, "type": document_type}
+    root = client.post("/api/destinations", json={"name": "Matriz"}).json()
+    branch = client.post("/api/destinations", json={"name": "Sucursal Norte", "parent_id": root["id"]}).json()
+    other = client.post("/api/destinations", json={"name": "Almacén"}).json()
+    return {"root": root, "branch": branch, "other": other}
 
 
-def upload(client, catalogs, content: bytes | None = None, filename: str = "doc.pdf", **fields):
+def upload(client, origins, content: bytes | None = None, filename: str = "carta.pdf", **fields):
     data = {
-        "title": "Contrato de arrendamiento",
-        "document_type_id": str(catalogs["type"]["id"]),
-        "destination_id": str(catalogs["child"]["id"]),
+        "destination_id": str(origins["branch"]["id"]),
+        "owner_full_name": "Juan García",
     }
-    data.update({key: str(value) for key, value in fields.items()})
+    data.update({key: str(value) for key, value in fields.items() if value is not None})
     files = {"file": (filename, content if content is not None else make_pdf(filename), "application/pdf")}
     return client.post("/api/documents", data=data, files=files)
 
 
-def test_upload_valid_pdf_stores_file_by_hash(client, catalogs, storage_path):
+def test_upload_without_title_uses_filename(client, origins, storage_path):
     content = make_pdf("valid")
-    response = upload(client, catalogs, content=content)
+    response = upload(client, origins, content=content, filename="Carta laptop Dell.pdf")
 
     assert response.status_code == 201
     body = response.json()
+    assert body["title"] == "Carta laptop Dell"
+    assert body["original_filename"] == "Carta laptop Dell.pdf"
     sha256 = hashlib.sha256(content).hexdigest()
     assert body["sha256"] == sha256
-    assert body["destination_path"] == "Finanzas / Facturas"
+    assert body["destination_path"] == "Matriz / Sucursal Norte"
     assert body["owner_name_edited"] is False
     assert body["document_date_edited"] is False
     stored = storage_path / "documents" / sha256[:2] / sha256[2:4] / f"{sha256}.pdf"
@@ -52,52 +52,108 @@ def test_upload_valid_pdf_stores_file_by_hash(client, catalogs, storage_path):
     assert list((storage_path / "documents" / ".tmp").iterdir()) == []
 
 
-def test_upload_non_pdf_returns_400(client, catalogs, storage_path):
-    response = upload(client, catalogs, content=b"hello, not a pdf", filename="fake.pdf")
+def test_upload_assigns_responsive_letter_type(client, origins):
+    body = upload(client, origins).json()
+    assert body["document_type_name"] == "Carta responsiva"
+
+
+def test_upload_ignores_document_type_id(client, origins):
+    response = upload(client, origins, document_type_id=9999)
+    assert response.status_code == 201
+    assert response.json()["document_type_name"] == "Carta responsiva"
+
+
+def test_upload_requires_owner(client, origins):
+    data = {"destination_id": str(origins["branch"]["id"])}
+    files = {"file": ("a.pdf", make_pdf("no-owner"), "application/pdf")}
+    assert client.post("/api/documents", data=data, files=files).status_code == 400
+
+
+def test_upload_single_word_owner_returns_400(client, origins):
+    response = upload(client, origins, owner_full_name="  Juan  ")
+    assert response.status_code == 400
+    assert "last name" in response.json()["detail"]
+
+
+def test_owner_name_is_cleaned_and_kept_as_written(client, origins):
+    response = upload(client, origins, owner_full_name="  María   de la  Luz  Ríos ")
+    assert response.json()["owner_name"] == "María de la Luz Ríos"
+
+
+def test_owner_is_reused_ignoring_accents_case_and_spaces(client, origins):
+    first = upload(client, origins, owner_full_name="José Pérez", filename="a.pdf").json()
+    second = upload(client, origins, owner_full_name="jose  perez", filename="b.pdf").json()
+
+    assert first["owner_id"] == second["owner_id"]
+    assert second["owner_name"] == "José Pérez"
+    assert len(client.get("/api/owners", params={"q": "perez"}).json()) == 1
+
+
+def test_upload_non_pdf_returns_400(client, origins, storage_path):
+    response = upload(client, origins, content=b"hello, not a pdf", filename="fake.pdf")
     assert response.status_code == 400
     assert list((storage_path / "documents" / ".tmp").iterdir()) == []
 
 
-def test_upload_too_large_returns_413(client, catalogs):
+def test_upload_too_large_returns_413(client, origins):
     content = MINIMAL_PDF + b"0" * (1024 * 1024 + 1)
-    assert upload(client, catalogs, content=content).status_code == 413
+    assert upload(client, origins, content=content).status_code == 413
 
 
-def test_upload_same_pdf_twice_returns_409_with_existing_id(client, catalogs):
+def test_upload_same_pdf_twice_returns_409_with_existing_id(client, origins):
     content = make_pdf("duplicate")
-    first = upload(client, catalogs, content=content)
-    second = upload(client, catalogs, content=content, title="Otro título")
+    first = upload(client, origins, content=content)
+    second = upload(client, origins, content=content, filename="copia.pdf")
 
     assert second.status_code == 409
     assert second.json()["detail"]["document_id"] == first.json()["id"]
 
 
-def test_upload_future_date_returns_400(client, catalogs):
-    tomorrow = date.today() + timedelta(days=1)
-    assert upload(client, catalogs, document_date=tomorrow.isoformat()).status_code == 400
-
-
-def test_upload_unknown_destination_returns_400(client, catalogs):
-    assert upload(client, catalogs, destination_id=9999).status_code == 400
-
-
-def test_upload_creates_owner_from_name(client, catalogs):
-    response = upload(client, catalogs, owner_name="María López")
+def test_upload_date_one_year_ago_is_accepted(client, origins):
+    last_year = date.today() - timedelta(days=365)
+    response = upload(client, origins, document_date=last_year.isoformat())
     assert response.status_code == 201
-    assert response.json()["owner_name"] == "María López"
-    owners = client.get("/api/owners", params={"q": "maria"}).json()
-    assert [owner["full_name"] for owner in owners] == ["María López"]
+    assert response.json()["document_date"] == last_year.isoformat()
 
 
-def test_file_requires_session(client, catalogs):
-    document_id = upload(client, catalogs).json()["id"]
+def test_upload_old_date_is_accepted(client, origins):
+    assert upload(client, origins, document_date="1995-03-15").status_code == 201
+
+
+def test_upload_without_date_is_accepted(client, origins):
+    response = upload(client, origins)
+    assert response.status_code == 201
+    assert response.json()["document_date"] is None
+
+
+def test_upload_future_date_returns_400(client, origins):
+    tomorrow = date.today() + timedelta(days=1)
+    assert upload(client, origins, document_date=tomorrow.isoformat()).status_code == 400
+
+
+def test_upload_invalid_date_format_returns_400(client, origins):
+    assert upload(client, origins, document_date="15/03/2024").status_code == 400
+
+
+def test_upload_unknown_origin_returns_400(client, origins):
+    assert upload(client, origins, destination_id=9999).status_code == 400
+
+
+def test_upload_requires_origin(client, origins):
+    data = {"owner_full_name": "Juan García"}
+    files = {"file": ("a.pdf", make_pdf("no-origin"), "application/pdf")}
+    assert client.post("/api/documents", data=data, files=files).status_code == 400
+
+
+def test_file_requires_session(client, origins):
+    document_id = upload(client, origins).json()["id"]
     client.cookies.clear()
     assert client.get(f"/api/documents/{document_id}/file").status_code == 401
 
 
-def test_file_is_served_inline(client, catalogs):
+def test_file_is_served_inline(client, origins):
     content = make_pdf("inline")
-    document_id = upload(client, catalogs, content=content, filename="contrato.pdf").json()["id"]
+    document_id = upload(client, origins, content=content, filename="carta.pdf").json()["id"]
     response = client.get(f"/api/documents/{document_id}/file")
 
     assert response.status_code == 200
@@ -106,69 +162,60 @@ def test_file_is_served_inline(client, catalogs):
     assert response.headers["content-disposition"].startswith("inline")
 
 
-def test_search_by_title(client, catalogs):
-    upload(client, catalogs, title="Contrato de arrendamiento", filename="a.pdf")
-    upload(client, catalogs, title="Factura de luz", filename="b.pdf")
+def test_search_by_filename_title(client, origins):
+    upload(client, origins, filename="Carta laptop Dell.pdf")
+    upload(client, origins, filename="Carta monitor.pdf")
 
-    body = client.get("/api/documents", params={"q": "arrendam"}).json()
+    body = client.get("/api/documents", params={"q": "lapt"}).json()
     assert body["total"] == 1
-    assert body["items"][0]["title"] == "Contrato de arrendamiento"
+    assert body["items"][0]["title"] == "Carta laptop Dell"
 
 
-def test_search_escapes_fts_syntax(client, catalogs):
-    upload(client, catalogs, title="Contrato AND anexo", filename="a.pdf")
-    for query in ['"', "NEAR(", "AND", "*", "-anexo", "contrato OR"]:
+def test_search_escapes_fts_syntax(client, origins):
+    upload(client, origins, filename="Carta AND anexo.pdf")
+    for query in ['"', "NEAR(", "AND", "*", "-anexo", "carta OR"]:
         assert client.get("/api/documents", params={"q": query}).status_code == 200
 
 
-def test_search_reflects_title_updates(client, catalogs):
-    document_id = upload(client, catalogs, title="Borrador").json()["id"]
-    client.patch(f"/api/documents/{document_id}", json={"title": "Escritura definitiva"})
-
-    assert client.get("/api/documents", params={"q": "borrador"}).json()["total"] == 0
-    assert client.get("/api/documents", params={"q": "escritura"}).json()["total"] == 1
-
-
-def test_owner_filter(client, catalogs):
-    upload(client, catalogs, owner_name="José Pérez", filename="a.pdf")
-    upload(client, catalogs, owner_name="Ana Gómez", filename="b.pdf")
-    upload(client, catalogs, filename="c.pdf")
+def test_owner_filter(client, origins):
+    upload(client, origins, owner_full_name="José Pérez", filename="a.pdf")
+    upload(client, origins, owner_full_name="Ana Gómez", filename="b.pdf")
 
     body = client.get("/api/documents", params={"owner": "perez"}).json()
     assert [item["owner_name"] for item in body["items"]] == ["José Pérez"]
 
 
-def test_date_range_filter(client, catalogs):
-    upload(client, catalogs, title="Enero", document_date="2024-01-15", filename="a.pdf")
-    upload(client, catalogs, title="Marzo", document_date="2024-03-10", filename="b.pdf")
-    upload(client, catalogs, title="Junio", document_date="2024-06-01", filename="c.pdf")
-    upload(client, catalogs, title="Sin fecha", filename="d.pdf")
+def test_date_range_filter(client, origins):
+    upload(client, origins, document_date="2024-01-15", filename="enero.pdf")
+    upload(client, origins, document_date="2024-03-10", filename="marzo.pdf")
+    upload(client, origins, document_date="2024-06-01", filename="junio.pdf")
+    upload(client, origins, filename="sin-fecha.pdf")
 
     body = client.get("/api/documents", params={"date_from": "2024-02-01", "date_to": "2024-06-01"}).json()
-    assert [item["title"] for item in body["items"]] == ["Junio", "Marzo"]
+    assert [item["title"] for item in body["items"]] == ["junio", "marzo"]
 
 
-def test_destination_filter_includes_children(client, catalogs):
-    upload(client, catalogs, title="En hijo", filename="a.pdf")
-    upload(client, catalogs, title="En otro", destination_id=catalogs["other"]["id"], filename="b.pdf")
+def test_origin_filter_includes_branches(client, origins):
+    upload(client, origins, filename="en-sucursal.pdf")
+    upload(client, origins, destination_id=origins["other"]["id"], filename="en-almacen.pdf")
 
-    body = client.get("/api/documents", params={"destination_id": catalogs["root"]["id"]}).json()
-    assert [item["title"] for item in body["items"]] == ["En hijo"]
+    body = client.get("/api/documents", params={"destination_id": origins["root"]["id"]}).json()
+    assert [item["title"] for item in body["items"]] == ["en-sucursal"]
 
 
-def test_list_orders_by_date_desc_and_caps_limit(client, catalogs):
-    upload(client, catalogs, title="Viejo", document_date="2020-01-01", filename="a.pdf")
-    upload(client, catalogs, title="Sin fecha", filename="b.pdf")
-    upload(client, catalogs, title="Nuevo", document_date="2023-01-01", filename="c.pdf")
+def test_list_orders_by_date_desc_and_caps_limit(client, origins):
+    upload(client, origins, document_date="2020-01-01", filename="viejo.pdf")
+    upload(client, origins, filename="sin-fecha.pdf")
+    upload(client, origins, document_date="2023-01-01", filename="nuevo.pdf")
 
     body = client.get("/api/documents", params={"limit": 500}).json()
     assert body["limit"] == 100
-    assert [item["title"] for item in body["items"]] == ["Nuevo", "Viejo", "Sin fecha"]
+    assert [item["title"] for item in body["items"]] == ["nuevo", "viejo", "sin-fecha"]
 
 
-def test_patch_marks_owner_name_edited(client, catalogs):
-    document_id = upload(client, catalogs).json()["id"]
-    response = client.patch(f"/api/documents/{document_id}", json={"owner_name": "Laura Ruiz"})
+def test_patch_owner_marks_owner_name_edited(client, origins):
+    document_id = upload(client, origins).json()["id"]
+    response = client.patch(f"/api/documents/{document_id}", json={"owner_full_name": "Laura  Ruiz"})
 
     assert response.status_code == 200
     body = response.json()
@@ -177,22 +224,40 @@ def test_patch_marks_owner_name_edited(client, catalogs):
     assert body["document_date_edited"] is False
 
 
-def test_patch_future_date_returns_400(client, catalogs):
-    document_id = upload(client, catalogs).json()["id"]
+def test_patch_single_word_owner_returns_400(client, origins):
+    document_id = upload(client, origins).json()["id"]
+    response = client.patch(f"/api/documents/{document_id}", json={"owner_full_name": "Laura"})
+    assert response.status_code == 400
+
+
+def test_patch_origin_and_date(client, origins):
+    document_id = upload(client, origins).json()["id"]
+    response = client.patch(
+        f"/api/documents/{document_id}",
+        json={"destination_id": origins["other"]["id"], "document_date": "2022-05-05"},
+    )
+
+    body = response.json()
+    assert body["destination_path"] == "Almacén"
+    assert body["document_date"] == "2022-05-05"
+    assert body["document_date_edited"] is True
+
+
+def test_patch_future_date_returns_400(client, origins):
+    document_id = upload(client, origins).json()["id"]
     tomorrow = date.today() + timedelta(days=1)
     response = client.patch(f"/api/documents/{document_id}", json={"document_date": tomorrow.isoformat()})
     assert response.status_code == 400
 
 
-def test_patch_by_other_regular_user_returns_403(client, catalogs, login_as):
-    document_id = upload(client, catalogs).json()["id"]
+def test_patch_by_other_regular_user_returns_403(client, origins, login_as):
+    document_id = upload(client, origins).json()["id"]
     login_as(username="bob", role="user")
-    response = client.patch(f"/api/documents/{document_id}", json={"title": "Cambio"})
+    response = client.patch(f"/api/documents/{document_id}", json={"document_date": "2022-01-01"})
     assert response.status_code == 403
 
 
-def test_delete_catalog_with_documents_returns_409(client, catalogs):
-    upload(client, catalogs)
-    assert client.delete(f"/api/destinations/{catalogs['child']['id']}").status_code == 409
-    assert client.delete(f"/api/document-types/{catalogs['type']['id']}").status_code == 409
-    assert client.delete(f"/api/destinations/{catalogs['other']['id']}").status_code == 204
+def test_delete_origin_with_documents_returns_409(client, origins):
+    upload(client, origins)
+    assert client.delete(f"/api/destinations/{origins['branch']['id']}").status_code == 409
+    assert client.delete(f"/api/destinations/{origins['other']['id']}").status_code == 204

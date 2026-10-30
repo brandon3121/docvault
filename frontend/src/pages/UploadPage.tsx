@@ -1,8 +1,9 @@
 import { useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, duplicateDocumentId, uploadDocument, type DocumentRecord } from "../api";
+import { duplicateDocumentId, uploadDocument, type DocumentRecord } from "../api";
 import DocumentForm, { type DocumentFormValues } from "../components/DocumentForm";
-import { useCatalogs } from "../hooks/useCatalogs";
+import { useDestinations } from "../hooks/useDestinations";
+import { documentErrorMessage } from "../messages";
 
 type Result =
   | { kind: "success"; document: DocumentRecord }
@@ -13,22 +14,8 @@ function isPdf(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
 
-function uploadErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 400) {
-      return typeof error.detail === "string" && error.detail.includes("future")
-        ? "La fecha del documento no puede ser futura."
-        : "El archivo no es un PDF válido o faltan datos obligatorios.";
-    }
-    if (error.status === 413) {
-      return "El archivo supera el tamaño máximo permitido.";
-    }
-  }
-  return "No se pudo subir el documento.";
-}
-
 export default function UploadPage() {
-  const { destinations, documentTypes, error: catalogError } = useCatalogs();
+  const { destinations, error: destinationsError } = useDestinations();
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,14 +42,8 @@ export default function UploadPage() {
     }
     const form = new FormData();
     form.set("file", file);
-    form.set("title", values.title.trim());
     form.set("destination_id", values.destinationId);
-    form.set("document_type_id", values.documentTypeId);
-    if (values.owner.id !== null) {
-      form.set("owner_id", String(values.owner.id));
-    } else if (values.owner.name.trim()) {
-      form.set("owner_name", values.owner.name.trim());
-    }
+    form.set("owner_full_name", values.ownerFullName);
     if (values.documentDate) {
       form.set("document_date", values.documentDate);
     }
@@ -79,7 +60,7 @@ export default function UploadPage() {
       setResult(
         existingId !== null
           ? { kind: "duplicate", documentId: existingId }
-          : { kind: "error", message: uploadErrorMessage(error) },
+          : { kind: "error", message: documentErrorMessage(error, "No se pudo subir el documento.") },
       );
     } finally {
       setSubmitting(false);
@@ -87,22 +68,22 @@ export default function UploadPage() {
   }
 
   return (
-    <section className="stack">
-      <h1>Subir documento</h1>
+    <div className="page-sections narrow">
+      <h1>Subir carta responsiva</h1>
 
-      {catalogError && <p className="form-error">No se pudieron cargar los catálogos.</p>}
-      {!catalogError && (destinations.length === 0 || documentTypes.length === 0) && (
-        <p className="muted">Se necesita al menos un destino y un tipo de documento. Un administrador puede crearlos en Catálogos.</p>
+      {destinationsError && <p className="form-error">No se pudieron cargar los orígenes.</p>}
+      {!destinationsError && destinations.length === 0 && (
+        <p className="muted">Se necesita al menos un origen. Un administrador puede crearlo en Orígenes.</p>
       )}
 
       {result?.kind === "success" && (
         <p className="notice" role="status">
-          Documento guardado: <Link to={`/documents/${result.document.id}`}>{result.document.title}</Link>
+          Carta guardada: <Link to={`/documents/${result.document.id}`}>{result.document.original_filename}</Link>
         </p>
       )}
       {result?.kind === "duplicate" && (
         <p className="form-error" role="alert">
-          Este PDF ya existe. <Link to={`/documents/${result.documentId}`}>Ver el documento existente</Link>
+          Este PDF ya está registrado. <Link to={`/documents/${result.documentId}`}>Ver el documento existente</Link>
         </p>
       )}
       {result?.kind === "error" && (
@@ -114,7 +95,6 @@ export default function UploadPage() {
       <DocumentForm
         key={formKey}
         destinations={destinations}
-        documentTypes={documentTypes}
         submitLabel={submitting ? "Subiendo" : "Subir"}
         submitting={submitting}
         onSubmit={handleSubmit}
@@ -123,13 +103,7 @@ export default function UploadPage() {
             <label className="field-label mono" htmlFor="document-file">
               ARCHIVO PDF
             </label>
-            <input
-              id="document-file"
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={handleFileChange}
-              required
-            />
+            <input id="document-file" type="file" accept="application/pdf,.pdf" onChange={handleFileChange} required />
             {fileError && (
               <p className="form-error" role="alert">
                 {fileError}
@@ -138,6 +112,6 @@ export default function UploadPage() {
           </div>
         }
       />
-    </section>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from pathlib import PureWindowsPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -11,7 +12,7 @@ from app.deps import get_current_user, get_db
 from app.destinations import descendant_ids, load_destination_tree
 from app.models import Destination, Document, DocumentType, Owner, User
 from app.schemas import DocumentOut, DocumentPage, DocumentUpdate
-from app.search import build_fts_query, contains_pattern, normalize_text
+from app.search import build_fts_query, collapse_spaces, contains_pattern, normalize_text
 from app.storage import (
     InvalidPdfError,
     UploadTooLargeError,
@@ -24,6 +25,8 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 MAX_PAGE_SIZE = 100
 TITLE_MAX_LENGTH = 500
+OWNER_NAME_MAX_LENGTH = 255
+RESPONSIVE_LETTER_TYPE = "Carta responsiva"
 
 
 def _bad_request(detail: str) -> HTTPException:
@@ -55,15 +58,6 @@ def _parse_optional_date(value: str | None) -> date | None:
         raise _bad_request("document_date must use the YYYY-MM-DD format") from None
 
 
-def _validate_title(title: str | None) -> str:
-    cleaned = (title or "").strip()
-    if not cleaned:
-        raise _bad_request("title is required")
-    if len(cleaned) > TITLE_MAX_LENGTH:
-        raise _bad_request(f"title must be at most {TITLE_MAX_LENGTH} characters")
-    return cleaned
-
-
 def _validate_document_date(value: date | None) -> date | None:
     if value is not None and value > date.today():
         raise _bad_request("document_date cannot be in the future")
@@ -75,24 +69,46 @@ def _require_existing(db: Session, model: type, object_id: int, field: str) -> N
         raise _bad_request(f"{field} does not exist")
 
 
-def _resolve_owner(db: Session, owner_id: int | None, owner_name: str | None) -> Owner | None:
-    if owner_id is not None:
-        owner = db.get(Owner, owner_id)
-        if owner is None:
-            raise _bad_request("owner_id does not exist")
-        return owner
+def _clean_owner_full_name(value: str | None) -> str:
+    cleaned = collapse_spaces(value)
+    if not cleaned:
+        raise _bad_request("owner_full_name is required")
+    if len(cleaned.split(" ")) < 2:
+        raise _bad_request("owner_full_name must include at least a first name and a last name")
+    if len(cleaned) > OWNER_NAME_MAX_LENGTH:
+        raise _bad_request(f"owner_full_name must be at most {OWNER_NAME_MAX_LENGTH} characters")
+    return cleaned
 
-    cleaned_name = " ".join((owner_name or "").split())
-    if not cleaned_name:
-        return None
+
+def _get_or_create_owner(db: Session, full_name: str) -> Owner:
     owner = db.scalar(
-        select(Owner).where(func.normalize_text(Owner.full_name) == normalize_text(cleaned_name)).limit(1)
+        select(Owner)
+        .where(func.normalize_text(Owner.full_name) == normalize_text(full_name))
+        .order_by(Owner.id)
+        .limit(1)
     )
     if owner is None:
-        owner = Owner(full_name=cleaned_name)
+        owner = Owner(full_name=full_name)
         db.add(owner)
         db.flush()
     return owner
+
+
+def _responsive_letter_type_id(db: Session) -> int:
+    type_id = db.scalar(select(DocumentType.id).where(DocumentType.name == RESPONSIVE_LETTER_TYPE))
+    if type_id is None:
+        raise RuntimeError(f"Document type '{RESPONSIVE_LETTER_TYPE}' is missing; run the migrations")
+    return type_id
+
+
+def _safe_filename(filename: str | None, sha256: str) -> str:
+    name = PureWindowsPath(filename or "").name.strip()
+    return name or f"{sha256}.pdf"
+
+
+def _title_from_filename(filename: str) -> str:
+    stem = PureWindowsPath(filename).stem.strip() or filename
+    return stem[:TITLE_MAX_LENGTH]
 
 
 def _owner_name_differs(owner: Owner | None, extracted_name: str | None) -> bool:
@@ -145,28 +161,19 @@ def _to_out(document: Document, destination_paths: dict[int, str]) -> DocumentOu
 @router.post("", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 def create_document(
     file: UploadFile = File(...),
-    title: str = Form(...),
-    document_type_id: str = Form(...),
-    destination_id: str = Form(...),
-    owner_id: str | None = Form(None),
-    owner_name: str | None = Form(None),
+    destination_id: str | None = Form(None),
+    owner_full_name: str | None = Form(None),
     document_date: str | None = Form(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DocumentOut:
-    cleaned_title = _validate_title(title)
-    type_id = _parse_optional_int(document_type_id, "document_type_id")
     target_destination_id = _parse_optional_int(destination_id, "destination_id")
-    if type_id is None:
-        raise _bad_request("document_type_id is required")
     if target_destination_id is None:
         raise _bad_request("destination_id is required")
-    _require_existing(db, DocumentType, type_id, "document_type_id")
     _require_existing(db, Destination, target_destination_id, "destination_id")
-    parsed_owner_id = _parse_optional_int(owner_id, "owner_id")
-    if parsed_owner_id is not None:
-        _require_existing(db, Owner, parsed_owner_id, "owner_id")
+    owner_name = _clean_owner_full_name(owner_full_name)
     parsed_date = _validate_document_date(_parse_optional_date(document_date))
+    type_id = _responsive_letter_type_id(db)
 
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     try:
@@ -184,20 +191,21 @@ def create_document(
         temp_path.unlink(missing_ok=True)
         raise _duplicate(existing_id)
 
+    original_filename = _safe_filename(file.filename, sha256)
     relative_path, file_already_existed = commit_spooled_file(temp_path, sha256)
     try:
-        owner = _resolve_owner(db, parsed_owner_id, owner_name)
+        owner = _get_or_create_owner(db, owner_name)
         document = Document(
-            title=cleaned_title,
+            title=_title_from_filename(original_filename),
             document_type_id=type_id,
             destination_id=target_destination_id,
-            owner_id=owner.id if owner else None,
+            owner_id=owner.id,
             owner_name_extracted=None,
             owner_name_edited=False,
             document_date=parsed_date,
             document_date_extracted=None,
             document_date_edited=False,
-            original_filename=file.filename or f"{sha256}.pdf",
+            original_filename=original_filename,
             storage_path=relative_path,
             sha256=sha256,
             extracted_text=None,
@@ -328,24 +336,14 @@ def update_document(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to edit this document")
 
     changes = payload.model_fields_set
-    if "title" in changes:
-        document.title = _validate_title(payload.title)
-    if "document_type_id" in changes:
-        if payload.document_type_id is None:
-            raise _bad_request("document_type_id is required")
-        _require_existing(db, DocumentType, payload.document_type_id, "document_type_id")
-        document.document_type_id = payload.document_type_id
     if "destination_id" in changes:
         if payload.destination_id is None:
             raise _bad_request("destination_id is required")
         _require_existing(db, Destination, payload.destination_id, "destination_id")
         document.destination_id = payload.destination_id
-    if "owner_id" in changes or "owner_name" in changes:
-        owner_id = payload.owner_id if "owner_id" in changes else None
-        if payload.owner_name and payload.owner_name.strip():
-            owner_id = None
-        owner = _resolve_owner(db, owner_id, payload.owner_name)
-        document.owner_id = owner.id if owner else None
+    if "owner_full_name" in changes:
+        owner = _get_or_create_owner(db, _clean_owner_full_name(payload.owner_full_name))
+        document.owner_id = owner.id
         document.owner = owner
         document.owner_name_edited = _owner_name_differs(owner, document.owner_name_extracted)
     if "document_date" in changes:

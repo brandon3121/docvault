@@ -55,7 +55,7 @@ h3 {
 }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
 }
 
 .mono {
@@ -109,6 +109,8 @@ h1 {
 
 .field-label {
   color: var(--color-text-secondary);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
 }
 
 input {
@@ -198,7 +200,9 @@ a {
 }
 
 h2 {
-  font-size: 1rem;
+  font-size: 1.125rem;
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border-strong);
 }
 
 select {
@@ -264,15 +268,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   border-bottom-color: var(--color-heading);
 }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
 
-.stack > h1 {
-  margin-bottom: 0;
-}
 
 .form-fieldset {
   border: 0;
@@ -290,9 +286,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   gap: var(--space-3);
 }
 
-.field-hint {
-  margin: var(--space-1) 0 0;
-}
 
 .notice {
   margin: 0;
@@ -302,36 +295,9 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   font-size: 0.875rem;
 }
 
-.combobox {
-  position: relative;
-}
 
-.combobox-list {
-  position: absolute;
-  z-index: 10;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-strong);
-  max-height: 16rem;
-  overflow-y: auto;
-}
 
-.combobox-option {
-  padding: var(--space-1) var(--space-2);
-  cursor: pointer;
-  border-bottom: 1px solid var(--color-border);
-}
 
-.combobox-option:hover,
-.combobox-option[aria-selected="true"] {
-  background: var(--color-border);
-  color: var(--color-heading);
-}
 
 .filters {
   display: grid;
@@ -343,7 +309,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 .filters-actions,
-.catalog-actions,
+.row-actions,
 .pagination {
   display: flex;
   flex-wrap: wrap;
@@ -401,8 +367,80 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 .back-link {
+  display: inline-block;
   text-decoration: none;
-  align-self: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.page-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.page-sections > h1 {
+  margin-bottom: 0;
+}
+
+.page-subtitle {
+  margin: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.section > h2 {
+  margin: 0;
+}
+
+.narrow {
+  max-width: 36rem;
+}
+
+.origins {
+  max-width: 40rem;
+}
+
+.origin-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.origin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.origin-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.origin-view,
+.origin-edit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.origin-edit > input {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.button-small {
+  padding: 0.25rem var(--space-1);
+  font-size: 0.75rem;
 }
 
 .detail {
@@ -444,68 +482,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   background: var(--color-bg);
 }
 
-.catalogs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
 
-.catalog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
 
-.catalog > h2 {
-  margin: 0;
-  padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--color-border-strong);
-}
 
-.catalog-add,
-.catalog-edit {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
-  align-items: end;
-}
 
-.catalog-add > input,
-.catalog-add > select,
-.catalog-edit > input,
-.catalog-edit > select {
-  flex: 1 1 10rem;
-  width: auto;
-}
 
-.catalog-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 
-.catalog-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding-top: var(--space-1);
-  padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--color-border);
-}
 
-.catalog-view {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
 
-.catalog-actions .button-secondary,
-.catalog-actions .button-primary {
-  padding: 0.25rem var(--space-1);
-  font-size: 0.75rem;
-}
 
 @media (max-width: 900px) {
   .detail {
@@ -544,7 +528,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 
   h1 {
-    font-size: 1.25rem;
+    font-size: 1.375rem;
     letter-spacing: 0.12em;
+  }
+
+  .origin-view,
+  .origin-edit {
+    flex-wrap: wrap;
   }
 }

@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { getMe, type User } from "./api";
 import Layout from "./components/Layout";
-import CatalogsPage from "./pages/CatalogsPage";
 import DocumentDetailPage from "./pages/DocumentDetailPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import LoginPage from "./pages/LoginPage";
+import OriginsPage from "./pages/OriginsPage";
 import UploadPage from "./pages/UploadPage";
 
 type AuthState = { status: "loading" } | { status: "anonymous" } | { status: "authenticated"; user: User };
@@ -43,8 +43,8 @@ export default function App() {
         <Route path="/documents/:id" element={<DocumentDetailPage user={user} />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route
-          path="/catalogs"
-          element={user.role === "admin" ? <CatalogsPage /> : <Navigate to="/documents" replace />}
+          path="/origins"
+          element={user.role === "admin" ? <OriginsPage /> : <Navigate to="/documents" replace />}
         />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

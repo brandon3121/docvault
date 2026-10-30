@@ -4,7 +4,6 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
-OptionalName = Annotated[str, StringConstraints(strip_whitespace=True, max_length=255)] | None
 
 
 class DestinationIn(BaseModel):
@@ -20,28 +19,11 @@ class DestinationOut(BaseModel):
     path: str
 
 
-class DocumentTypeIn(BaseModel):
-    name: Name
-
-
-class DocumentTypeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str
-
-
-class OwnerIn(BaseModel):
-    full_name: Name
-    department: OptionalName = None
-
-
 class OwnerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     full_name: str
-    department: str | None
 
 
 class DocumentOut(BaseModel):
@@ -73,9 +55,6 @@ class DocumentPage(BaseModel):
 
 
 class DocumentUpdate(BaseModel):
-    title: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] | None = None
     destination_id: int | None = None
-    document_type_id: int | None = None
-    owner_id: int | None = None
-    owner_name: OptionalName = None
+    owner_full_name: str | None = None
     document_date: date | None = None

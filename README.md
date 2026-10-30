@@ -38,9 +38,9 @@ curl http://localhost:8080/api/health
 
 ## Uso
 
-- **Catálogos** (solo administradores): destinos jerárquicos, tipos de documento y propietarios. Hay que crear al menos un destino y un tipo antes de subir documentos. Un catálogo con documentos asociados no se puede borrar.
-- **Subir**: PDF de hasta `MAX_UPLOAD_MB` MB (50 por defecto; el mismo valor limita nginx). Un PDF idéntico (mismo SHA-256) no se guarda dos veces: la app enlaza al documento existente. Si el propietario escrito no existe, se crea.
-- **Documentos**: búsqueda por texto en el título (FTS5), filtros por propietario (sin acentos ni mayúsculas), destino (incluye subdestinos), tipo y rango de fechas. El detalle permite editar metadatos y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
+- **Orígenes** (solo administradores): lista de orígenes de las cartas. Hay que crear al menos uno antes de subir documentos. Un origen con documentos o sucursales no se puede borrar. La API acepta `parent_id` para registrar sucursales más adelante.
+- **Subir**: carta responsiva en PDF de hasta `MAX_UPLOAD_MB` MB (50 por defecto; el mismo valor limita nginx). Se capturan el origen, el nombre completo del propietario (nombre y al menos un apellido) y, opcionalmente, la fecha del documento. El tipo es siempre "Carta responsiva" y el título se toma del nombre del archivo. Si el propietario ya existe con otra escritura ("José Pérez" y "jose perez"), se reutiliza. Un PDF idéntico (mismo SHA-256) no se guarda dos veces: la app enlaza al documento existente.
+- **Documentos**: filtros por propietario (sin acentos ni mayúsculas), origen (incluye sucursales), nombre de archivo y rango de fechas. El detalle permite cambiar origen, propietario y fecha, y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
 
 La extracción automática de texto, propietario y fecha todavía no existe: esos datos se capturan a mano.
 

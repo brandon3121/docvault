@@ -4,16 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_current_user, get_db, require_admin
 from app.destinations import DestinationNode, descendant_ids, load_destination_tree
-from app.models import Destination, Document, DocumentType, Owner
-from app.schemas import (
-    DestinationIn,
-    DestinationOut,
-    DocumentTypeIn,
-    DocumentTypeOut,
-    OwnerIn,
-    OwnerOut,
-)
-from app.search import contains_pattern, normalize_text
+from app.models import Destination, Document, Owner
+from app.schemas import DestinationIn, DestinationOut, OwnerOut
+from app.search import contains_pattern
 
 router = APIRouter(prefix="/api", tags=["catalogs"])
 
@@ -72,9 +65,10 @@ def update_destination(destination_id: int, payload: DestinationIn, db: Session 
     destination = db.get(Destination, destination_id)
     if destination is None:
         raise _not_found("Destination")
-    _validate_parent(db, payload.parent_id, destination_id)
     destination.name = payload.name
-    destination.parent_id = payload.parent_id
+    if "parent_id" in payload.model_fields_set:
+        _validate_parent(db, payload.parent_id, destination_id)
+        destination.parent_id = payload.parent_id
     db.commit()
     return _destination_out(db, destination.id)
 
@@ -97,99 +91,9 @@ def delete_destination(destination_id: int, db: Session = Depends(get_db)) -> Re
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-def _ensure_unique_type_name(db: Session, name: str, exclude_id: int | None = None) -> None:
-    query = select(DocumentType.id).where(func.normalize_text(DocumentType.name) == normalize_text(name))
-    if exclude_id is not None:
-        query = query.where(DocumentType.id != exclude_id)
-    if db.scalar(query) is not None:
-        raise _conflict("Document type already exists")
-
-
-@router.get("/document-types", response_model=list[DocumentTypeOut], dependencies=[Depends(get_current_user)])
-def list_document_types(db: Session = Depends(get_db)) -> list[DocumentType]:
-    return list(db.scalars(select(DocumentType).order_by(func.normalize_text(DocumentType.name))))
-
-
-@router.post(
-    "/document-types",
-    response_model=DocumentTypeOut,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
-)
-def create_document_type(payload: DocumentTypeIn, db: Session = Depends(get_db)) -> DocumentType:
-    _ensure_unique_type_name(db, payload.name)
-    document_type = DocumentType(name=payload.name)
-    db.add(document_type)
-    db.commit()
-    return document_type
-
-
-@router.put("/document-types/{type_id}", response_model=DocumentTypeOut, dependencies=[Depends(require_admin)])
-def update_document_type(type_id: int, payload: DocumentTypeIn, db: Session = Depends(get_db)) -> DocumentType:
-    document_type = db.get(DocumentType, type_id)
-    if document_type is None:
-        raise _not_found("Document type")
-    _ensure_unique_type_name(db, payload.name, exclude_id=type_id)
-    document_type.name = payload.name
-    db.commit()
-    return document_type
-
-
-@router.delete(
-    "/document-types/{type_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_admin)],
-)
-def delete_document_type(type_id: int, db: Session = Depends(get_db)) -> Response:
-    document_type = db.get(DocumentType, type_id)
-    if document_type is None:
-        raise _not_found("Document type")
-    if _any_row(db, Document.document_type_id == type_id):
-        raise _conflict("Document type has documents")
-    db.delete(document_type)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
 @router.get("/owners", response_model=list[OwnerOut], dependencies=[Depends(get_current_user)])
 def list_owners(q: str | None = Query(None, max_length=255), db: Session = Depends(get_db)) -> list[Owner]:
     query = select(Owner).order_by(func.normalize_text(Owner.full_name)).limit(OWNER_SEARCH_LIMIT)
     if q and q.strip():
         query = query.where(func.normalize_text(Owner.full_name).like(contains_pattern(q), escape="\\"))
     return list(db.scalars(query))
-
-
-@router.post(
-    "/owners",
-    response_model=OwnerOut,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
-)
-def create_owner(payload: OwnerIn, db: Session = Depends(get_db)) -> Owner:
-    owner = Owner(full_name=payload.full_name, department=payload.department or None)
-    db.add(owner)
-    db.commit()
-    return owner
-
-
-@router.put("/owners/{owner_id}", response_model=OwnerOut, dependencies=[Depends(require_admin)])
-def update_owner(owner_id: int, payload: OwnerIn, db: Session = Depends(get_db)) -> Owner:
-    owner = db.get(Owner, owner_id)
-    if owner is None:
-        raise _not_found("Owner")
-    owner.full_name = payload.full_name
-    owner.department = payload.department or None
-    db.commit()
-    return owner
-
-
-@router.delete("/owners/{owner_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
-def delete_owner(owner_id: int, db: Session = Depends(get_db)) -> Response:
-    owner = db.get(Owner, owner_id)
-    if owner is None:
-        raise _not_found("Owner")
-    if _any_row(db, Document.owner_id == owner_id):
-        raise _conflict("Owner has documents")
-    db.delete(owner)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)

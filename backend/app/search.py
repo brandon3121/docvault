@@ -12,6 +12,10 @@ def normalize_text(value: str | None) -> str | None:
     return " ".join(without_marks.casefold().split())
 
 
+def collapse_spaces(value: str | None) -> str:
+    return " ".join((value or "").split())
+
+
 def escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
