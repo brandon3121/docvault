@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -58,6 +58,14 @@ class Owner(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index(
+            "uq_documents_sha256_active",
+            "sha256",
+            unique=True,
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(500))
@@ -71,7 +79,7 @@ class Document(Base):
     document_date_edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     original_filename: Mapped[str] = mapped_column(String(500))
     storage_path: Mapped[str] = mapped_column(String(1000))
-    sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
     extracted_text: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

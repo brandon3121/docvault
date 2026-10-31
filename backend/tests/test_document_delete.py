@@ -87,3 +87,32 @@ def test_other_documents_remain_visible(client, origins, login_as, document):  #
     body = client.get("/api/documents").json()
     assert [item["id"] for item in body["items"]] == [other["id"]]
     assert body["total"] == 1
+
+
+def test_reupload_after_delete_creates_new_document(
+    client, origins, login_as, document, session_factory, storage_path  # noqa: F811
+):
+    login_as("dba", role="user")
+    assert client.delete(f"/api/documents/{document['id']}").status_code == 204
+
+    response = upload(client, origins, owner_full_name="Ana Prueba Ficticia", filename="borrable.pdf")
+    assert response.status_code == 201
+    reuploaded = response.json()
+    assert reuploaded["id"] != document["id"]
+    assert reuploaded["sha256"] == document["sha256"]
+
+    with session_factory() as db:
+        rows = db.scalars(select(Document).where(Document.sha256 == document["sha256"]).order_by(Document.id)).all()
+    assert [(row.id, row.deleted_at is None) for row in rows] == [(document["id"], False), (reuploaded["id"], True)]
+    assert (storage_path / rows[1].storage_path).is_file()
+    assert client.get(f"/api/documents/{reuploaded['id']}/file").status_code == 200
+
+
+def test_active_reupload_is_still_duplicate(client, origins, login_as, document):  # noqa: F811
+    login_as("dba", role="user")
+    client.delete(f"/api/documents/{document['id']}")
+    reuploaded = upload(client, origins, owner_full_name="Ana Prueba Ficticia", filename="borrable.pdf").json()
+
+    response = upload(client, origins, owner_full_name="Ana Prueba Ficticia", filename="borrable.pdf")
+    assert response.status_code == 409
+    assert response.json()["detail"]["document_id"] == reuploaded["id"]

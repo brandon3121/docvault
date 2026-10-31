@@ -145,6 +145,10 @@ def _with_relations(query: Select) -> Select:
     )
 
 
+def _active_document_id(db: Session, sha256: str) -> int | None:
+    return db.scalar(select(Document.id).where(Document.sha256 == sha256, Document.deleted_at.is_(None)))
+
+
 def _get_document(db: Session, document_id: int) -> Document:
     document = db.scalar(
         _with_relations(select(Document)).where(Document.id == document_id, Document.deleted_at.is_(None))
@@ -204,7 +208,7 @@ def create_document(
 
     temp_path, sha256 = _spool_upload(file)
 
-    existing_id = db.scalar(select(Document.id).where(Document.sha256 == sha256))
+    existing_id = _active_document_id(db, sha256)
     if existing_id is not None:
         temp_path.unlink(missing_ok=True)
         raise _duplicate(existing_id)
@@ -234,7 +238,7 @@ def create_document(
         db.commit()
     except IntegrityError:
         db.rollback()
-        existing_id = db.scalar(select(Document.id).where(Document.sha256 == sha256))
+        existing_id = _active_document_id(db, sha256)
         if existing_id is not None:
             raise _duplicate(existing_id) from None
         if not file_already_existed:
