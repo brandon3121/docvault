@@ -182,19 +182,43 @@ def test_file_is_served_inline(client, origins):
     assert response.headers["content-disposition"].startswith("inline")
 
 
-def test_search_by_filename_title(client, origins):
-    upload(client, origins, filename="Carta laptop Dell.pdf")
-    upload(client, origins, filename="Carta monitor.pdf")
+def test_filename_query_parameter_is_ignored(client, origins):
+    laptop = upload(client, origins, filename="Carta laptop Dell.pdf").json()
+    monitor = upload(client, origins, filename="Carta monitor.pdf").json()
 
     body = client.get("/api/documents", params={"q": "lapt"}).json()
-    assert body["total"] == 1
-    assert body["items"][0]["title"] == "Carta laptop Dell"
+    assert body["total"] == 2
+    assert {item["id"] for item in body["items"]} == {laptop["id"], monitor["id"]}
+    for query in ['"', "NEAR(", "AND", "*"]:
+        assert client.get("/api/documents", params={"q": query}).json()["total"] == 2
 
 
-def test_search_escapes_fts_syntax(client, origins):
-    upload(client, origins, filename="Carta AND anexo.pdf")
-    for query in ['"', "NEAR(", "AND", "*", "-anexo", "carta OR"]:
-        assert client.get("/api/documents", params={"q": query}).status_code == 200
+def test_remaining_filters_work_together(client, origins):
+    match = upload(
+        client, origins, filename="a.pdf", owner_full_name="Laura Pérez", document_date="2024-03-10"
+    ).json()
+    upload(client, origins, filename="b.pdf", owner_full_name="Laura Pérez", document_date="2023-03-10")
+    upload(client, origins, filename="c.pdf", owner_full_name="Juan García", document_date="2024-03-10")
+    upload(
+        client,
+        origins,
+        filename="d.pdf",
+        owner_full_name="Laura Pérez",
+        document_date="2024-03-10",
+        destination_id=origins["other"]["id"],
+    )
+
+    body = client.get(
+        "/api/documents",
+        params={
+            "owner": "laura perez",
+            "destination_id": origins["root"]["id"],
+            "date_from": "2024-01-01",
+            "date_to": "2024-12-31",
+            "q": "b",
+        },
+    ).json()
+    assert [item["id"] for item in body["items"]] == [match["id"]]
 
 
 def test_owner_filter(client, origins):

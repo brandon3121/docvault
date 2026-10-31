@@ -47,7 +47,6 @@ export interface DocumentPage {
 }
 
 export interface DocumentFilters {
-  q?: string;
   owner?: string;
   destination_id?: string;
   date_from?: string;

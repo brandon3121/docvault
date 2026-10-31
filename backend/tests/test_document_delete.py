@@ -48,7 +48,6 @@ def test_deleted_document_is_hidden_from_reads(client, login_as, document):
         return [item["id"] for item in client.get("/api/documents", params=params).json()["items"]]
 
     assert document_id not in listed()
-    assert document_id not in listed(q="borrable")
     assert document_id not in listed(owner="Ana Prueba")
     assert document_id not in listed(destination_id=document["destination_id"])
     assert client.get(f"/api/documents/{document_id}").status_code == 404

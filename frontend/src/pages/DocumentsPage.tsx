@@ -15,7 +15,7 @@ import { useDestinations } from "../hooks/useDestinations";
 
 const PAGE_SIZE = 50;
 const OWNER_SUGGESTION_DELAY_MS = 200;
-const FILTER_KEYS = ["q", "owner", "destination_id", "date_from", "date_to"] as const;
+const FILTER_KEYS = ["owner", "destination_id", "date_from", "date_to"] as const;
 
 type FilterKey = (typeof FILTER_KEYS)[number];
 type FilterValues = Record<FilterKey, string>;
@@ -179,12 +179,6 @@ export default function DocumentsPage() {
               onChange={(value) => updateDraft("destination_id", value)}
               emptyLabel="Todos"
             />
-          </div>
-          <div className="field">
-            <label className="field-label mono" htmlFor="filter-q">
-              ARCHIVO
-            </label>
-            <input id="filter-q" type="search" value={draft.q} onChange={(event) => updateDraft("q", event.target.value)} />
           </div>
           <div className="field">
             <label className="field-label mono" htmlFor="filter-date-from">

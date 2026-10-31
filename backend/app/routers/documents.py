@@ -4,7 +4,7 @@ from pathlib import Path, PureWindowsPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import Select, and_, func, or_, select, text
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -14,7 +14,7 @@ from app.destinations import descendant_ids, load_destination_tree
 from app.extraction import suggest
 from app.models import Destination, Document, DocumentType, Owner, User, utcnow
 from app.schemas import DocumentOut, DocumentPage, DocumentSuggestion, DocumentUpdate
-from app.search import build_fts_query, collapse_spaces, contains_pattern, normalize_text
+from app.search import collapse_spaces, contains_pattern, normalize_text
 from app.storage import (
     InvalidPdfError,
     UploadTooLargeError,
@@ -270,7 +270,6 @@ def extract_document_fields(
 
 @router.get("", response_model=DocumentPage)
 def list_documents(
-    q: str | None = Query(None, max_length=500),
     owner: str | None = Query(None, max_length=255),
     destination_id: int | None = None,
     document_type_id: int | None = None,
@@ -288,14 +287,6 @@ def list_documents(
         .where(Document.deleted_at.is_(None))
     )
 
-    fts_query = build_fts_query(q) if q else None
-    if fts_query:
-        matches = (
-            text("SELECT rowid FROM document_fts WHERE document_fts MATCH :fts")
-            .bindparams(fts=fts_query)
-            .columns(Document.id)
-        )
-        query = query.where(Document.id.in_(matches))
     if owner and owner.strip():
         pattern = contains_pattern(owner)
         query = query.where(
