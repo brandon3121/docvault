@@ -2,6 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { listDocuments, searchOwners, type DocumentFilters, type DocumentPage, type Owner } from "../api";
 import DestinationSelect from "../components/DestinationSelect";
+import {
+  DOCUMENT_DATE_MESSAGE,
+  MIN_DOCUMENT_DATE,
+  isDocumentDateInRange,
+  openDatePicker,
+  todayIso,
+} from "../components/DocumentForm";
+import ErrorNotice from "../components/ErrorNotice";
 import { formatDate, formatDateTime } from "../format";
 import { useDestinations } from "../hooks/useDestinations";
 
@@ -11,6 +19,23 @@ const FILTER_KEYS = ["q", "owner", "destination_id", "date_from", "date_to"] as 
 
 type FilterKey = (typeof FILTER_KEYS)[number];
 type FilterValues = Record<FilterKey, string>;
+type DateErrors = Partial<Record<"date_from" | "date_to", string>>;
+
+const DATE_ORDER_MESSAGE = "La fecha Desde no puede ser posterior a Hasta";
+
+function validateDateFilters(values: FilterValues): DateErrors {
+  const errors: DateErrors = {};
+  if (!isDocumentDateInRange(values.date_from)) {
+    errors.date_from = DOCUMENT_DATE_MESSAGE;
+  }
+  if (!isDocumentDateInRange(values.date_to)) {
+    errors.date_to = DOCUMENT_DATE_MESSAGE;
+  }
+  if (!errors.date_from && !errors.date_to && values.date_from && values.date_to && values.date_from > values.date_to) {
+    errors.date_to = DATE_ORDER_MESSAGE;
+  }
+  return errors;
+}
 
 function filtersFromParams(params: URLSearchParams): FilterValues {
   return Object.fromEntries(FILTER_KEYS.map((key) => [key, params.get(key) ?? ""])) as FilterValues;
@@ -49,6 +74,7 @@ export default function DocumentsPage() {
   const [page, setPage] = useState<DocumentPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [dateErrors, setDateErrors] = useState<DateErrors>({});
   const ownerSuggestions = useOwnerSuggestions(draft.owner);
 
   const offset = Number(params.get("offset") ?? 0) || 0;
@@ -87,17 +113,26 @@ export default function DocumentsPage() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const errors = validateDateFilters(draft);
+    setDateErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
     applyFilters(draft);
   }
 
   function handleClear() {
     const empty = filtersFromParams(new URLSearchParams());
     setDraft(empty);
+    setDateErrors({});
     applyFilters(empty);
   }
 
   function updateDraft(key: FilterKey, value: string) {
     setDraft((current) => ({ ...current, [key]: value }));
+    if (key === "date_from" || key === "date_to") {
+      setDateErrors({});
+    }
   }
 
   const applied = filtersFromParams(params);
@@ -158,9 +193,16 @@ export default function DocumentsPage() {
             <input
               id="filter-date-from"
               type="date"
+              className="date-input"
+              min={MIN_DOCUMENT_DATE}
+              max={todayIso()}
               value={draft.date_from}
               onChange={(event) => updateDraft("date_from", event.target.value)}
+              onFocus={openDatePicker}
+              onClick={openDatePicker}
+              aria-invalid={Boolean(dateErrors.date_from)}
             />
+            {dateErrors.date_from && <ErrorNotice>{dateErrors.date_from}</ErrorNotice>}
           </div>
           <div className="field">
             <label className="field-label mono" htmlFor="filter-date-to">
@@ -169,9 +211,16 @@ export default function DocumentsPage() {
             <input
               id="filter-date-to"
               type="date"
+              className="date-input"
+              min={MIN_DOCUMENT_DATE}
+              max={todayIso()}
               value={draft.date_to}
               onChange={(event) => updateDraft("date_to", event.target.value)}
+              onFocus={openDatePicker}
+              onClick={openDatePicker}
+              aria-invalid={Boolean(dateErrors.date_to)}
             />
+            {dateErrors.date_to && <ErrorNotice>{dateErrors.date_to}</ErrorNotice>}
           </div>
           <div className="filters-actions">
             <button type="submit" className="button-primary">

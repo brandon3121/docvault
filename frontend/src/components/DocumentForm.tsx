@@ -58,11 +58,13 @@ function hasFirstAndLastName(value: string): boolean {
   return collapseSpaces(value).split(" ").length >= 2;
 }
 
-function isDocumentDateInRange(value: string): boolean {
-  return !value || (value >= MIN_DOCUMENT_DATE && value <= todayIso());
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isDocumentDateInRange(value: string): boolean {
+  return !value || (ISO_DATE_PATTERN.test(value) && value >= MIN_DOCUMENT_DATE && value <= todayIso());
 }
 
-function openDatePicker(event: SyntheticEvent<HTMLInputElement>) {
+export function openDatePicker(event: SyntheticEvent<HTMLInputElement>) {
   const input = event.currentTarget;
   if (typeof input.showPicker !== "function") {
     return;
