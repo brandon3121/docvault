@@ -1,7 +1,4 @@
-import re
 import unicodedata
-
-_WORD_PATTERN = re.compile(r"\w+")
 
 
 def normalize_text(value: str | None) -> str | None:
@@ -22,10 +19,3 @@ def escape_like(value: str) -> str:
 
 def contains_pattern(value: str) -> str:
     return f"%{escape_like(normalize_text(value) or '')}%"
-
-
-def build_fts_query(text: str) -> str | None:
-    words = _WORD_PATTERN.findall(text)
-    if not words:
-        return None
-    return " ".join(f'"{word}"*' for word in words)
