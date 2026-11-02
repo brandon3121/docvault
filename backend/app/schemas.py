@@ -1,7 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
@@ -45,6 +45,14 @@ class DocumentOut(BaseModel):
     uploaded_by: int
     uploaded_by_name: str
     uploaded_at: datetime
+
+    @field_validator("uploaded_at")
+    @classmethod
+    def uploaded_at_as_utc(cls, value: datetime) -> datetime:
+        # SQLite returns stored datetimes without a zone; they were saved in UTC.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 class DocumentPage(BaseModel):
