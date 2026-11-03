@@ -40,7 +40,7 @@ curl http://localhost:8080/api/health
 
 - **Orígenes** (solo administradores): lista de orígenes de las cartas. Hay que crear al menos uno antes de subir documentos. Un origen con documentos o sucursales no se puede borrar. La API acepta `parent_id` para registrar sucursales más adelante.
 - **Subir**: carta responsiva en PDF de hasta `MAX_UPLOAD_MB` MB (50 por defecto; el mismo valor limita nginx). Se capturan el origen, el nombre completo del propietario (nombre y al menos un apellido) y, opcionalmente, la fecha del documento. El tipo es siempre "Carta responsiva" y el título se toma del nombre del archivo. Si el propietario ya existe con otra escritura ("José Pérez" y "jose perez"), se reutiliza. Un PDF idéntico (mismo SHA-256) no se guarda dos veces: la app enlaza al documento existente.
-- **Documentos**: filtros por propietario (sin acentos ni mayúsculas), origen (incluye sucursales), nombre de archivo y rango de fechas. El detalle permite cambiar origen, propietario y fecha, y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
+- **Documentos**: filtros por propietario (sin acentos ni mayúsculas), origen (incluye sucursales) y rango de fechas. El detalle permite cambiar origen, propietario y fecha, y muestra el PDF. Solo quien lo subió o un administrador puede editarlo.
 
 Al elegir un PDF en **Subir**, el servidor lee las dos primeras páginas (capa de texto o, si es un escaneo, OCR con Tesseract en español) y sugiere la fecha del recuadro "Fecha:" y el nombre impreso sobre la línea del área ("Seguridad"). Las sugerencias solo llenan campos que el usuario no ha tocado y siempre se pueden corregir; si no se encuentra nada, los campos quedan vacíos. Al guardar se registra lo sugerido y si el usuario lo cambió (`owner_name_edited`, `document_date_edited`). La imagen de Docker incluye Tesseract; sin Docker hace falta instalarlo y, si no está en el `PATH`, indicar la ruta en `TESSERACT_CMD`. Sin Tesseract la carga funciona igual, solo sin sugerencias en escaneos.
 
@@ -73,27 +73,11 @@ npm run dev
 
 Vite envía `/api` a `http://localhost:8000`.
 
-## Despliegue en servidor
-
-Los mismos pasos que arriba (`cp .env.example .env`, `docker compose up --build -d`, `create-admin`), con estos cambios:
-
-- En `.env`, poner `SESSION_COOKIE_SECURE=true`. La cookie de sesión solo viajará por HTTPS.
-- Poner HTTPS delante del puerto 8080, por ejemplo con Caddy en el host:
-
-  ```
-  docvault.ejemplo.com {
-      reverse_proxy localhost:8080
-  }
-  ```
-
-  O con nginx en el host, con un certificado y `proxy_pass http://127.0.0.1:8080;`.
-- Si el proxy está en el mismo host, conviene publicar solo en loopback: `WEB_PORT=127.0.0.1:8080`.
-
 ## Producción en red local
 
 `docker-compose.prod.yml` agrega Caddy delante de `web` con HTTPS y un certificado de su autoridad interna (`tls internal`). Caddy publica 443 y 80 solo en la IP del servidor. El puerto 80 redirige a HTTPS, y `web` deja de publicar el 8080.
 
-1. En `.env`:
+1. Copiar la configuración (`cp .env.example .env`) y, en `.env`:
 
    ```sh
    DOCVAULT_HOST=192.168.1.50      # IP del servidor en la red local
@@ -108,13 +92,19 @@ Los mismos pasos que arriba (`cp .env.example .env`, `docker compose up --build 
 
    El certificado y la autoridad interna se guardan en los volúmenes `caddy_data` y `caddy_config`, así que sobreviven a reinicios y reconstrucciones. No los borres con `down -v`: cambiaría la autoridad y habría que volver a instalarla en cada PC.
 
-3. Exportar el certificado raíz de Caddy:
+3. Crear el primer administrador (pide la contraseña dos veces):
+
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm api python -m app.cli create-admin --username admin --full-name "Nombre Apellido"
+   ```
+
+4. Exportar el certificado raíz de Caddy:
 
    ```sh
    docker compose -f docker-compose.yml -f docker-compose.prod.yml cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
    ```
 
-4. Instalarlo en cada PC con Windows que use docvault, en "Entidades de certificación raíz de confianza" del equipo:
+5. Instalarlo en cada PC con Windows que use docvault, en "Entidades de certificación raíz de confianza" del equipo:
    - Doble clic en `caddy-root.crt` > Instalar certificado > Equipo local > Colocar todos los certificados en el siguiente almacén > Entidades de certificación raíz de confianza.
    - O en PowerShell como administrador:
 
@@ -124,7 +114,7 @@ Los mismos pasos que arriba (`cp .env.example .env`, `docker compose up --build 
 
    Después abrir `https://<DOCVAULT_HOST>`. Chrome y Edge usan ese almacén; reinicia el navegador si ya estaba abierto.
 
-5. En el servidor, abrir 443 y 80 solo en el perfil Privado del firewall de Windows (PowerShell como administrador):
+6. En el servidor, abrir 443 y 80 solo en el perfil Privado del firewall de Windows (PowerShell como administrador):
 
    ```powershell
    New-NetFirewallRule -DisplayName "docvault HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443,80 -Action Allow -Profile Private
