@@ -7,7 +7,6 @@ services:
       DOCVAULT_HOST: ${DOCVAULT_HOST:?Define DOCVAULT_HOST en .env con la IP del servidor}
     ports:
       - "${DOCVAULT_HOST}:443:443"
-      - "${DOCVAULT_HOST}:80:80"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -75,7 +75,7 @@ Vite envía `/api` a `http://localhost:8000`.
 
 ## Producción en red local
 
-`docker-compose.prod.yml` agrega Caddy delante de `web` con HTTPS y un certificado de su autoridad interna (`tls internal`). Caddy publica 443 y 80 solo en la IP del servidor. El puerto 80 redirige a HTTPS, y `web` deja de publicar el 8080.
+`docker-compose.prod.yml` agrega Caddy delante de `web` con HTTPS y un certificado de su autoridad interna (`tls internal`). Caddy publica solo el 443 en la IP del servidor, así que se entra siempre con `https://`. El 80 no se publica porque en el servidor puede estar ocupado por otros servicios, como IIS. `web` deja de publicar el 8080.
 
 1. Copiar la configuración (`cp .env.example .env`) y, en `.env`:
 
@@ -114,10 +114,10 @@ Vite envía `/api` a `http://localhost:8000`.
 
    Después abrir `https://<DOCVAULT_HOST>`. Chrome y Edge usan ese almacén; reinicia el navegador si ya estaba abierto.
 
-6. En el servidor, abrir 443 y 80 solo en el perfil Privado del firewall de Windows (PowerShell como administrador):
+6. En el servidor, abrir 443 solo en el perfil Privado del firewall de Windows (PowerShell como administrador):
 
    ```powershell
-   New-NetFirewallRule -DisplayName "docvault HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443,80 -Action Allow -Profile Private
+   New-NetFirewallRule -DisplayName "docvault HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443 -Action Allow -Profile Private
    ```
 
    La red del servidor debe estar marcada como Privada en Configuración > Red e Internet.
