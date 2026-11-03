@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { listDocuments, searchOwners, type DocumentFilters, type DocumentPage, type Owner } from "../api";
 import DestinationSelect from "../components/DestinationSelect";
 import {
