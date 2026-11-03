@@ -1,0 +1,10 @@
+{
+	# Los clientes no envían SNI al conectar por IP, y dentro del contenedor la IP
+	# local es la de Docker; sin esto Caddy no encuentra el certificado.
+	default_sni {$DOCVAULT_HOST}
+}
+
+{$DOCVAULT_HOST} {
+	tls internal
+	reverse_proxy web:80
+}

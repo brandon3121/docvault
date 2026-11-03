@@ -89,6 +89,51 @@ Los mismos pasos que arriba (`cp .env.example .env`, `docker compose up --build 
   O con nginx en el host, con un certificado y `proxy_pass http://127.0.0.1:8080;`.
 - Si el proxy está en el mismo host, conviene publicar solo en loopback: `WEB_PORT=127.0.0.1:8080`.
 
+## Producción en red local
+
+`docker-compose.prod.yml` agrega Caddy delante de `web` con HTTPS y un certificado de su autoridad interna (`tls internal`). Caddy publica 443 y 80 solo en la IP del servidor. El puerto 80 redirige a HTTPS, y `web` deja de publicar el 8080.
+
+1. En `.env`:
+
+   ```sh
+   DOCVAULT_HOST=192.168.1.50      # IP del servidor en la red local
+   SESSION_COOKIE_SECURE=true
+   ```
+
+2. Levantar:
+
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+   ```
+
+   El certificado y la autoridad interna se guardan en los volúmenes `caddy_data` y `caddy_config`, así que sobreviven a reinicios y reconstrucciones. No los borres con `down -v`: cambiaría la autoridad y habría que volver a instalarla en cada PC.
+
+3. Exportar el certificado raíz de Caddy:
+
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
+   ```
+
+4. Instalarlo en cada PC con Windows que use docvault, en "Entidades de certificación raíz de confianza" del equipo:
+   - Doble clic en `caddy-root.crt` > Instalar certificado > Equipo local > Colocar todos los certificados en el siguiente almacén > Entidades de certificación raíz de confianza.
+   - O en PowerShell como administrador:
+
+     ```powershell
+     Import-Certificate -FilePath .\caddy-root.crt -CertStoreLocation Cert:\LocalMachine\Root
+     ```
+
+   Después abrir `https://<DOCVAULT_HOST>`. Chrome y Edge usan ese almacén; reinicia el navegador si ya estaba abierto.
+
+5. En el servidor, abrir 443 y 80 solo en el perfil Privado del firewall de Windows (PowerShell como administrador):
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "docvault HTTPS" -Direction Inbound -Protocol TCP -LocalPort 443,80 -Action Allow -Profile Private
+   ```
+
+   La red del servidor debe estar marcada como Privada en Configuración > Red e Internet.
+
+Para volver al entorno de desarrollo, quitar Caddy con `docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -sf caddy` y después correr `docker compose up -d`.
+
 ## Respaldo
 
 Todo el estado está en `./storage`.
