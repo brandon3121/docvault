@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router";
 import { getMe, type User } from "./api";
 import Layout from "./components/Layout";
 import DocumentDetailPage from "./pages/DocumentDetailPage";

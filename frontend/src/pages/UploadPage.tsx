@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { duplicateDocumentId, extractDocumentFields, uploadDocument, type DocumentRecord } from "../api";
 import DocumentForm, { type DocumentFormSuggestion, type DocumentFormValues } from "../components/DocumentForm";
 import ErrorNotice from "../components/ErrorNotice";
